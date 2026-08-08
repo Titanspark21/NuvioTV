@@ -75,7 +75,6 @@ import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
@@ -112,7 +111,9 @@ fun HeroContentSection(
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
     onShowFullDescription: () -> Unit = {},
-    onRandomEpisodeClick: (() -> Unit)? = null
+    onRandomEpisodeClick: (() -> Unit)? = null,
+    onRollAgainClick: (() -> Unit)? = null,
+    isRollingAgain: Boolean = false
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -252,6 +253,18 @@ fun HeroContentSection(
                             }
                         )
 
+                        // Fork: only present on a title reached by rolling, and sitting
+                        // immediately after Play because it is the other thing you might
+                        // want to do with a suggestion you were just handed.
+                        if (onRollAgainClick != null) {
+                            RollAgainButton(
+                                text = stringResource(R.string.surprise_me_roll_again),
+                                isRolling = isRollingAgain,
+                                onClick = onRollAgainClick,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
+
                         ActionIconButton(
                             icon = if (isInLibrary) Icons.Default.Check else null,
                             painter = if (!isInLibrary) {
@@ -266,8 +279,7 @@ fun HeroContentSection(
                         )
 
                         if (isSeriesApi && onRandomEpisodeClick != null) {
-                            ActionIconButton(
-                                icon = Icons.Default.Shuffle,
+                            ShuffleActionButton(
                                 contentDescription = stringResource(R.string.hero_play_random_episode),
                                 onClick = onRandomEpisodeClick,
                                 onFocused = onHeroActionFocused
