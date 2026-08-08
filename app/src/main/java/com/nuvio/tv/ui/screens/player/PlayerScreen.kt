@@ -245,6 +245,13 @@ fun PlayerScreen(
 
     val handleBackPress = handleBackPress@{
         if (externalHandoffInProgress) return@handleBackPress
+        // Fork: night mode is an overlay like any other and must be closed by Back before
+        // Back means "leave the player". Without this it was only dismissable by exiting
+        // the stream entirely.
+        if (showNightModeOverlay) {
+            showNightModeOverlay = false
+            return@handleBackPress
+        }
         if (shouldConfirmNextEpisodeOnEnd) {
             returnToDetailsFromEndPrompt()
         } else if (uiState.error != null) {
