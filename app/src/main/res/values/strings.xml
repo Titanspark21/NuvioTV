@@ -183,6 +183,7 @@
     <string name="hero_mark_watched">Mark as watched</string>
     <string name="hero_mark_unwatched">Mark as unwatched</string>
     <string name="hero_play_trailer">Play trailer</string>
+    <string name="hero_play_random_episode">Play a random episode</string>
     <string name="hero_press_back_trailer">Press back to exit trailer</string>
     <string name="hero_synopsis_read_more">Read more</string>
     <string name="hero_synopsis_dismiss_hint">Press back to close</string>
