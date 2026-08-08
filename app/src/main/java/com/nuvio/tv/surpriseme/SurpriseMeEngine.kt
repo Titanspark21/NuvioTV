@@ -7,10 +7,15 @@ import com.nuvio.tv.domain.model.MetaPreview
 import com.nuvio.tv.domain.repository.AddonRepository
 import com.nuvio.tv.domain.repository.CatalogRepository
 import com.nuvio.tv.domain.repository.LibraryRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
@@ -42,6 +47,7 @@ class SurpriseMeEngine @Inject constructor(
     private val libraryRepository: LibraryRepository
 ) {
     private val lock = Mutex()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private var pressIndex = 0
     private var kind: SurpriseKind = SurpriseKind.SHOW
@@ -62,27 +68,75 @@ class SurpriseMeEngine @Inject constructor(
      */
     val lastPickId: StateFlow<String?> = _lastPickId.asStateFlow()
 
+    /**
+     * The pick for the NEXT press, worked out in the background while the owner is
+     * looking at the current one.
+     *
+     * A roll costs several catalogue round trips, which is where the wait comes from.
+     * Doing that work during the seconds someone spends reading a synopsis turns the
+     * following press into an instant one. It is only ever a saved result, so a stale
+     * preload can do nothing worse than be discarded.
+     */
+    private var preloaded: RollResult.Picked? = null
+    private var preloadJob: Job? = null
+
     fun beginSession(kind: SurpriseKind, includeWatched: Boolean) {
         this.kind = kind
         this.includeWatched = includeWatched
         alreadyOffered.clear()
+        discardPreload()
         _lastPickId.value = null
     }
 
     fun endSession() {
+        discardPreload()
         _lastPickId.value = null
     }
 
-    suspend fun roll(): RollResult = lock.withLock {
+    private fun discardPreload() {
+        preloadJob?.cancel()
+        preloadJob = null
+        // A preloaded pick was already counted as offered; putting it back keeps it
+        // eligible rather than silently burning a title the owner never saw.
+        preloaded?.let { alreadyOffered -= it.item.id }
+        preloaded = null
+    }
+
+    suspend fun roll(): RollResult {
+        preloaded?.let { ready ->
+            preloaded = null
+            _lastPickId.value = ready.item.id
+            schedulePreload()
+            return ready
+        }
+
+        val outcome = lock.withLock { rollLocked() }
+        if (outcome is RollResult.Picked) {
+            _lastPickId.value = outcome.item.id
+            schedulePreload()
+        }
+        return outcome
+    }
+
+    private suspend fun rollLocked(): RollResult {
         val outcome = runCatching { rollOnce() }
             .getOrElse { RollResult.Failed(it.message ?: "Could not reach your recommendation addons.") }
 
         if (outcome is RollResult.Picked) {
             alreadyOffered += outcome.item.id
             pressIndex++
-            _lastPickId.value = outcome.item.id
         }
-        outcome
+        return outcome
+    }
+
+    private fun schedulePreload() {
+        preloadJob?.cancel()
+        preloadJob = scope.launch {
+            val next = lock.withLock { rollLocked() }
+            // Only a successful pick is worth keeping; a failure should be retried live
+            // so the owner sees a current error rather than an old one.
+            preloaded = next as? RollResult.Picked
+        }
     }
 
     private suspend fun rollOnce(): RollResult {
