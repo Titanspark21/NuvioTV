@@ -221,11 +221,27 @@ internal fun PlayerRuntimeController.recomputeNextEpisode(resetVisibility: Boole
         return
     }
 
-    val resolvedNext = PlayerNextEpisodeRules.resolveNextEpisode(
-        videos = metaVideos,
-        currentSeason = season,
-        currentEpisode = episode
-    )
+    // Fork: when the owner started this show with the shuffle button, "next" means another
+    // random episode rather than the one after this. Everything downstream - the end card,
+    // the countdown, autoplay - is untouched and simply acts on whatever is returned here.
+    val shuffling = com.nuvio.tv.shuffleplay.ShufflePlaySession.isActiveFor(contentId)
+    if (shuffling) {
+        // Record what is playing now so a short run does not keep serving the same few.
+        videoId?.let(com.nuvio.tv.shuffleplay.ShufflePlaySession::remember)
+    }
+    val resolvedNext = if (shuffling) {
+        com.nuvio.tv.shuffleplay.ShufflePlaySession.pickNext(
+            videos = metaVideos,
+            currentSeason = season,
+            currentEpisode = episode
+        )
+    } else {
+        PlayerNextEpisodeRules.resolveNextEpisode(
+            videos = metaVideos,
+            currentSeason = season,
+            currentEpisode = episode
+        )
+    }
 
     nextEpisodeVideo = resolvedNext
     if (resolvedNext == null) {
