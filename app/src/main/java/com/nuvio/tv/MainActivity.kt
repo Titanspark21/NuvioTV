@@ -263,6 +263,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var deepLinkHandler: DeepLinkHandler
 
+    @Inject
+    lateinit var nightModeManager: com.nuvio.tv.nightmode.NightModeManager
+
     private val pendingDeepLinkUrl = MutableStateFlow<String?>(null)
 
     private lateinit var jankStats: JankStats
@@ -885,6 +888,13 @@ class MainActivity : ComponentActivity() {
                                     modifier = Modifier.fillMaxSize()
                                 )
                             }
+
+                            val nightModeState by nightModeManager.state.collectAsState()
+                            com.nuvio.tv.nightmode.NightModeOverlay(
+                                enabled = nightModeState.enabled,
+                                strengthPercent = nightModeState.strength,
+                                modifier = Modifier.fillMaxSize()
+                            )
                         }
                     }
                 }

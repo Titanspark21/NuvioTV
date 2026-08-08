@@ -3010,5 +3010,12 @@
     <string name="stream_test_error_prefix">Error: %1$s</string>
     <string name="stream_test_video_bitrate">Average Video Bitrate: %1$s</string>
     <string name="stream_test_error_connection">Connection failed. The last played stream link may have expired or is unreachable. Please play the video again and retry.</string>
+    <string name="night_mode_title">Night mode</string>
+    <string name="night_mode_subtitle">Dims the screen for watching in the dark</string>
+    <string name="night_mode_enable">Night mode</string>
+    <string name="night_mode_enable_subtitle">Turns itself off at 6:00 am</string>
+    <string name="night_mode_strength">Dimming</string>
+    <string name="night_mode_strength_subtitle">How much the screen is dimmed</string>
 
 </resources>
+
