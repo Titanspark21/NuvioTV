@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Fork: overrides the launcher name for the "full" flavour only. Paired with the
+  applicationIdSuffix in app/build.gradle.kts so this build installs alongside the
+  official Nuvio app instead of replacing it, and is told apart on the home screen.
+-->
+<resources>
+    <string name="app_name">Nuvio Shuffle</string>
+</resources>
