@@ -15,9 +15,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shuffle
+import android.view.KeyEvent as AndroidKeyEvent
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -36,6 +41,16 @@ import androidx.tv.material3.IconButtonDefaults
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 /**
+ * The same keys the episode cards and the play button treat as "select". Declared here
+ * because the identical predicate in EpisodesSection is private to that file.
+ */
+private fun isShuffleSelectKey(keyCode: Int): Boolean {
+    return keyCode == AndroidKeyEvent.KEYCODE_DPAD_CENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_ENTER ||
+        keyCode == AndroidKeyEvent.KEYCODE_NUMPAD_ENTER
+}
+
+/**
  * Fork addition. The "play a random episode" control in the hero row.
  *
  * It carries a gradient and a little motion because it is the one button there that does
@@ -51,8 +66,11 @@ import com.nuvio.tv.ui.theme.NuvioTheme
 fun ShuffleActionButton(
     contentDescription: String,
     onClick: () -> Unit,
+    onLongPress: (() -> Unit)? = null,
     onFocused: () -> Unit = {}
 ) {
+    var longPressTriggered by remember { mutableStateOf(false) }
+    val longPressKeyTracker = rememberLongPressKeyTracker()
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
     val transition = rememberInfiniteTransition(label = "shuffleButton")
@@ -108,11 +126,28 @@ fun ShuffleActionButton(
         // The gradient is the Box's background, so the button contributes only its icon,
         // focus ring and ripple - hence the transparent container colours.
         IconButton(
-            onClick = onClick,
+            onClick = {
+                if (longPressTriggered) longPressTriggered = false else onClick()
+            },
             interactionSource = interactionSource,
             modifier = Modifier
                 .size(size)
                 .onFocusChanged { state -> if (state.isFocused) onFocused() }
+                // Long press picks a random episode but stops at the stream list, matching
+                // how a long press on the Play button and on an episode card already work.
+                .onPreviewKeyEvent { event ->
+                    val native = event.nativeKeyEvent
+                    if (onLongPress != null &&
+                        longPressKeyTracker.handle(native, ::isShuffleSelectKey) {
+                            longPressTriggered = true
+                            onLongPress()
+                        }
+                    ) {
+                        if (native.action == AndroidKeyEvent.ACTION_UP) longPressTriggered = false
+                        return@onPreviewKeyEvent true
+                    }
+                    false
+                }
                 .focusProperties { up = FocusRequester.Cancel },
             colors = IconButtonDefaults.colors(
                 containerColor = Color.Transparent,
