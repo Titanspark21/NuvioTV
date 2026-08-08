@@ -45,6 +45,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Casino
 import androidx.compose.material.icons.filled.Explore
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Search
@@ -793,11 +794,13 @@ class MainActivity : ComponentActivity() {
                     val strNavSearch = stringResource(R.string.nav_search)
                     val strNavLibrary = stringResource(R.string.nav_library)
                     val strNavSettings = stringResource(R.string.nav_settings)
+                    val strNavSurpriseMe = stringResource(R.string.nav_surprise_me)
                     val drawerItems = remember(
                         strNavHome,
                         strNavDiscover,
                         strNavSearch,
                         strNavLibrary,
+                        strNavSurpriseMe,
                         strNavSettings,
                         discoverLocation
                     ) {
@@ -830,6 +833,15 @@ class MainActivity : ComponentActivity() {
                                     route = Screen.Library.route,
                                     label = strNavLibrary,
                                     iconRes = R.raw.sidebar_library
+                                )
+                            )
+                            // Fork addition, sitting between Library and Settings: it is
+                            // something you go to in order to watch, not a preference.
+                            add(
+                                DrawerItem(
+                                    route = Screen.SurpriseMe.route,
+                                    label = strNavSurpriseMe,
+                                    icon = Icons.Default.Casino
                                 )
                             )
                             add(
