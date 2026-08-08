@@ -260,8 +260,42 @@ fun ThemeSettingsContent(
                     onClick = { showLanguageDialog = true }
                 )
             }
+
+            val nightModeViewModel: com.nuvio.tv.nightmode.NightModeViewModel = hiltViewModel()
+            val nightModeState by nightModeViewModel.nightModeManager.state.collectAsStateWithLifecycle()
+
+            SettingsGroupCard(
+                modifier = Modifier.fillMaxWidth(),
+                title = stringResource(R.string.night_mode_title),
+                subtitle = stringResource(R.string.night_mode_subtitle)
+            ) {
+                SettingsToggleRow(
+                    title = stringResource(R.string.night_mode_enable),
+                    subtitle = stringResource(R.string.night_mode_enable_subtitle),
+                    checked = nightModeState.enabled,
+                    onToggle = {
+                        nightModeViewModel.nightModeManager.setEnabled(!nightModeState.enabled)
+                    }
+                )
+                if (nightModeState.enabled) {
+                    SliderSettingsItem(
+                        icon = null,
+                        title = stringResource(R.string.night_mode_strength),
+                        value = nightModeState.strength,
+                        valueText = "${nightModeState.strength}%",
+                        minValue = 0,
+                        maxValue = 70,
+                        step = 5,
+                        onValueChange = {
+                            nightModeViewModel.nightModeManager.setStrength(it)
+                        },
+                        subtitle = stringResource(R.string.night_mode_strength_subtitle)
+                    )
+                }
+            }
         }
         SettingsVerticalScrollIndicators(state = themeScrollState)
+
     }
 
     if (showFontDialog) {
