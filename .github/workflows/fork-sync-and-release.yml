@@ -1,0 +1,191 @@
+name: Sync upstream and release
+
+# Keeps this fork level with NuvioMedia/NuvioTV and publishes a signed APK set
+# whenever upstream moves. The app's in-app updater points at THIS repo's
+# releases (see GITHUB_OWNER in app/build.gradle.kts), so a successful run here
+# is what makes the "update available" prompt appear on the TV.
+#
+# The fork's own changes live as ordinary commits on top of upstream/dev and are
+# rebased onto each new upstream state. A rebase that conflicts stops the run and
+# opens an issue instead of publishing anything.
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build and release even if upstream has not moved
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: fork-sync-and-release
+  cancel-in-progress: false
+
+jobs:
+  sync-and-release:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPSTREAM: https://github.com/NuvioMedia/NuvioTV.git
+
+    steps:
+      - name: Check out this fork
+        uses: actions/checkout@v6
+        with:
+          ref: dev
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch upstream
+        run: |
+          git config user.name "fork-sync"
+          git config user.email "fork-sync@users.noreply.github.com"
+          git remote add upstream "${UPSTREAM}" 2>/dev/null || git remote set-url upstream "${UPSTREAM}"
+          git fetch upstream dev
+
+      - name: Decide whether there is anything to do
+        id: decide
+        run: |
+          upstream_sha="$(git rev-parse upstream/dev)"
+          echo "upstream_sha=${upstream_sha}" >> "${GITHUB_OUTPUT}"
+
+          # Each release records the upstream commit it was built from, so a scheduled
+          # run that finds the same commit can stop without building anything.
+          last_sha="$(gh release view --json body --jq .body 2>/dev/null \
+            | grep -oE 'upstream-sha: [0-9a-f]{40}' | head -1 | cut -d' ' -f2 || true)"
+
+          if [[ "${last_sha}" == "${upstream_sha}" && "${{ inputs.force }}" != "true" ]]; then
+            echo "Upstream unchanged since the last release (${upstream_sha}); nothing to do."
+            echo "proceed=false" >> "${GITHUB_OUTPUT}"
+          else
+            echo "proceed=true" >> "${GITHUB_OUTPUT}"
+          fi
+
+      - name: Rebase the fork's changes onto upstream
+        if: steps.decide.outputs.proceed == 'true'
+        id: rebase
+        run: |
+          if git rebase upstream/dev; then
+            echo "Rebase clean."
+          else
+            git rebase --abort || true
+            echo "conflict=true" >> "${GITHUB_OUTPUT}"
+            exit 1
+          fi
+
+      - name: Report a rebase conflict
+        if: failure() && steps.rebase.outputs.conflict == 'true'
+        run: |
+          gh issue create \
+            --title "Upstream sync needs a hand ($(date -u +%Y-%m-%d))" \
+            --body "The scheduled sync could not rebase this fork's changes onto upstream/dev at ${{ steps.decide.outputs.upstream_sha }} without conflicts. Upstream has edited the same lines the fork changes. Resolve it locally with \`git fetch upstream && git rebase upstream/dev\`, push, then re-run this workflow. No release was published, so the app keeps offering the last good build."
+
+      - name: Read version and pick a build number
+        if: steps.decide.outputs.proceed == 'true'
+        id: version
+        run: |
+          base_version="$(grep -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts | head -1)"
+          if [[ -z "${base_version}" ]]; then
+            echo "Could not read versionName from app/build.gradle.kts" >&2
+            exit 1
+          fi
+
+          # Releases for the same upstream version get an incrementing suffix, so a
+          # rebuild always compares newer than whatever is already on the device.
+          existing="$(gh release list --limit 100 --json tagName --jq '.[].tagName' \
+            | grep -c "^v${base_version}\." || true)"
+          fork_build=$(( existing + 1 ))
+
+          echo "base_version=${base_version}" >> "${GITHUB_OUTPUT}"
+          echo "fork_build=${fork_build}" >> "${GITHUB_OUTPUT}"
+          echo "tag=v${base_version}.${fork_build}" >> "${GITHUB_OUTPUT}"
+
+      - name: Set up Java
+        if: steps.decide.outputs.proceed == 'true'
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        if: steps.decide.outputs.proceed == 'true'
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Write build configuration
+        if: steps.decide.outputs.proceed == 'true'
+        env:
+          LOCAL_PROPERTIES_BASE64: ${{ secrets.LOCAL_PROPERTIES_BASE64 }}
+          RELEASE_KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+        run: |
+          for name in LOCAL_PROPERTIES_BASE64 RELEASE_KEYSTORE_BASE64 RELEASE_KEY_ALIAS \
+                      RELEASE_KEY_PASSWORD RELEASE_STORE_PASSWORD; do
+            if [[ -z "${!name}" ]]; then
+              echo "Missing repository secret: ${name}" >&2
+              exit 1
+            fi
+          done
+
+          keystore_path="${RUNNER_TEMP}/fork-release.jks"
+          printf '%s' "${RELEASE_KEYSTORE_BASE64}" | base64 --decode > "${keystore_path}"
+          printf '%s' "${LOCAL_PROPERTIES_BASE64}" | base64 --decode > local.properties
+
+          # sdk.dir is machine-specific; the runner supplies its own.
+          sed -i -E '/^[[:space:]]*sdk\.dir[[:space:]]*=/d' local.properties
+          {
+            echo "NUVIO_RELEASE_STORE_FILE=${keystore_path}"
+            echo "NUVIO_RELEASE_KEY_ALIAS=${RELEASE_KEY_ALIAS}"
+            echo "NUVIO_RELEASE_KEY_PASSWORD=${RELEASE_KEY_PASSWORD}"
+            echo "NUVIO_RELEASE_STORE_PASSWORD=${RELEASE_STORE_PASSWORD}"
+          } >> local.properties
+
+      - name: Accept SDK licences
+        if: steps.decide.outputs.proceed == 'true'
+        run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
+
+      - name: Build release APKs
+        if: steps.decide.outputs.proceed == 'true'
+        run: ./gradlew :app:assembleFullRelease -PFORK_BUILD=${{ steps.version.outputs.fork_build }} --stacktrace
+
+      - name: Push the rebased branch
+        if: steps.decide.outputs.proceed == 'true'
+        run: git push --force-with-lease origin dev
+
+      - name: Publish the release
+        if: steps.decide.outputs.proceed == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          UPSTREAM_SHA: ${{ steps.decide.outputs.upstream_sha }}
+          BASE_VERSION: ${{ steps.version.outputs.base_version }}
+        run: |
+          mapfile -t apks < <(find app/build/outputs/apk/full/release -maxdepth 1 -name '*.apk' | sort)
+          if (( ${#apks[@]} == 0 )); then
+            echo "No APKs were produced." >&2
+            exit 1
+          fi
+
+          upstream_subject="$(git log -1 --format=%s "${UPSTREAM_SHA}")"
+
+          {
+            echo "Automatic build of NuvioTV ${BASE_VERSION} with the fork's shuffle button."
+            echo
+            echo "Upstream: NuvioMedia/NuvioTV at [\`${UPSTREAM_SHA:0:7}\`](https://github.com/NuvioMedia/NuvioTV/commit/${UPSTREAM_SHA}) - ${upstream_subject}"
+            echo
+            echo "Notes for the upstream changes are on [their releases page](https://github.com/NuvioMedia/NuvioTV/releases)."
+            echo
+            echo "<!-- upstream-sha: ${UPSTREAM_SHA} -->"
+          } > notes.md
+
+          gh release create "${TAG}" \
+            --target "$(git rev-parse HEAD)" \
+            --title "${TAG}" \
+            --notes-file notes.md \
+            "${apks[@]}"
