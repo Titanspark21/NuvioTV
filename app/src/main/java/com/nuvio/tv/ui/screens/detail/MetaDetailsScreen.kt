@@ -454,6 +454,32 @@ fun MetaDetailsScreen(
             }
             uiState.meta != null -> {
                 val meta = uiState.meta!!
+
+                // Fork: a virtual "Top rated" tab that sits after the season tabs and
+                // flattens every season into one list ordered by rating, best first.
+                // It is resolved entirely here, at the point the season state is handed
+                // down, so neither the view model nor the episodes row knows it exists -
+                // which is what keeps it off upstream's toes when this fork rebases.
+                var topRatedSelected by rememberSaveable(meta.id) { mutableStateOf(false) }
+                val topRatedEpisodes = remember(meta.videos, uiState.episodeImdbRatings) {
+                    meta.videos
+                        .filter { it.season != null && it.season != 0 && it.episode != null }
+                        .sortedWith(
+                            compareByDescending<Video> {
+                                uiState.episodeImdbRatings[it.season to it.episode]
+                                    ?: Double.NEGATIVE_INFINITY
+                            }
+                                .thenBy { it.season }
+                                .thenBy { it.episode }
+                        )
+                }
+                // Offering the tab before any ratings arrive would sort by nothing.
+                val topRatedAvailable = uiState.episodeImdbRatings.isNotEmpty() &&
+                    topRatedEpisodes.size > 1
+                if (!topRatedAvailable && topRatedSelected) {
+                    topRatedSelected = false
+                }
+
                 val genresString = remember(meta.genres) {
                     meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
                 }
@@ -471,9 +497,9 @@ fun MetaDetailsScreen(
                     onDetailReturnEpisodeFocusConsumed = onReturnFocusConsumed,
                     lastFocusedEpisodeIdBySeason = viewModel.lastFocusedEpisodeIdBySeason,
                     heroRestoreToken = heroRestoreToken,
-                    seasons = uiState.seasons,
-                    selectedSeason = uiState.selectedSeason,
-                    episodesForSeason = uiState.episodesForSeason,
+                    seasons = if (topRatedAvailable) uiState.seasons + TOP_RATED_SEASON else uiState.seasons,
+                    selectedSeason = if (topRatedSelected) TOP_RATED_SEASON else uiState.selectedSeason,
+                    episodesForSeason = if (topRatedSelected) topRatedEpisodes else uiState.episodesForSeason,
                     isInLibrary = uiState.isInLibrary,
                     librarySourceMode = uiState.librarySourceMode,
                     nextToWatch = uiState.nextToWatch,
@@ -504,7 +530,15 @@ fun MetaDetailsScreen(
                     commentsMode = uiState.commentsMode,
                     commentsEpisodeTarget = uiState.commentsEpisodeTarget,
                     selectedComment = uiState.selectedComment,
-                    onSeasonSelected = { viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(it)) },
+                    onSeasonSelected = { season ->
+                        if (season == TOP_RATED_SEASON) {
+                            // Not a real season, so the view model must not be asked to load it.
+                            topRatedSelected = true
+                        } else {
+                            topRatedSelected = false
+                            viewModel.onEvent(MetaDetailsEvent.OnSeasonSelected(season))
+                        }
+                    },
                     onEpisodeClick = { video ->
                         onPlayClick(
                             video.id,
