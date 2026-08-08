@@ -1446,6 +1446,27 @@ private fun MetaDetailsContent(
             onEpisodeManualPlayClick(video)
         }
     }
+
+    // Fork addition: shuffle button in the hero row. Specials (season 0) and episodes the
+    // addon has flagged unavailable are excluded so the pick is always something playable.
+    val randomEpisodePool = remember(meta.videos) {
+        meta.videos.filter { video ->
+            video.season != null && video.season != 0 &&
+                video.episode != null &&
+                video.available != false
+        }
+    }
+    val randomEpisodeClick = remember(randomEpisodePool, onEpisodeClick) {
+        if (randomEpisodePool.isEmpty()) {
+            null
+        } else {
+            {
+                val video = randomEpisodePool.random()
+                markEpisodeRestore(video.id)
+                onEpisodeClick(video)
+            }
+        }
+    }
     val episodeCommentsClick = remember(
         onCommentsEpisodeSelected,
         shouldShowCommentsSection
@@ -1670,6 +1691,7 @@ private fun MetaDetailsContent(
                         onTrailerClick = onTrailerButtonClick,
                         hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
+                        onRandomEpisodeClick = randomEpisodeClick,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
