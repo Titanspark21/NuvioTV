@@ -75,6 +75,7 @@ import com.nuvio.tv.ui.components.ImdbRatingSourceLabel
 import com.nuvio.tv.ui.theme.NuvioTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.ui.platform.LocalContext
@@ -110,7 +111,8 @@ fun HeroContentSection(
     restorePlayFocusToken: Int = 0,
     onHeroActionFocused: () -> Unit = {},
     onPlayFocusRestored: () -> Unit = {},
-    onShowFullDescription: () -> Unit = {}
+    onShowFullDescription: () -> Unit = {},
+    onRandomEpisodeClick: (() -> Unit)? = null
 ) {
     val context = LocalContext.current
     val isSeriesApi = remember(meta.apiType) {
@@ -262,6 +264,15 @@ fun HeroContentSection(
                             onLongPress = onLibraryLongPress,
                             onFocused = onHeroActionFocused
                         )
+
+                        if (isSeriesApi && onRandomEpisodeClick != null) {
+                            ActionIconButton(
+                                icon = Icons.Default.Shuffle,
+                                contentDescription = stringResource(R.string.hero_play_random_episode),
+                                onClick = onRandomEpisodeClick,
+                                onFocused = onHeroActionFocused
+                            )
+                        }
 
                         if (meta.apiType == "movie") {
                             ActionIconButton(
