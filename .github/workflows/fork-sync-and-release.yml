@@ -57,7 +57,7 @@ jobs:
 
           # Each release records the upstream commit it was built from, so a scheduled
           # run that finds the same commit can stop without building anything.
-          last_sha="$(gh release view --json body --jq .body 2>/dev/null \
+          last_sha="$(gh release view --repo "${GITHUB_REPOSITORY}" --json body --jq .body 2>/dev/null \
             | grep -oE 'upstream-sha: [0-9a-f]{40}' | head -1 | cut -d' ' -f2 || true)"
 
           if [[ "${last_sha}" == "${upstream_sha}" && "${{ inputs.force }}" != "true" ]]; then
@@ -82,7 +82,7 @@ jobs:
       - name: Report a rebase conflict
         if: failure() && steps.rebase.outputs.conflict == 'true'
         run: |
-          gh issue create \
+          gh issue create --repo "${GITHUB_REPOSITORY}" \
             --title "Upstream sync needs a hand ($(date -u +%Y-%m-%d))" \
             --body "The scheduled sync could not rebase this fork's changes onto upstream/dev at ${{ steps.decide.outputs.upstream_sha }} without conflicts. Upstream has edited the same lines the fork changes. Resolve it locally with \`git fetch upstream && git rebase upstream/dev\`, push, then re-run this workflow. No release was published, so the app keeps offering the last good build."
 
@@ -98,7 +98,7 @@ jobs:
 
           # Releases for the same upstream version get an incrementing suffix, so a
           # rebuild always compares newer than whatever is already on the device.
-          existing="$(gh release list --limit 100 --json tagName --jq '.[].tagName' \
+          existing="$(gh release list --repo "${GITHUB_REPOSITORY}" --limit 100 --json tagName --jq '.[].tagName' \
             | grep -c "^v${base_version}\." || true)"
           fork_build=$(( existing + 1 ))
 
@@ -158,6 +158,18 @@ jobs:
         if: steps.decide.outputs.proceed == 'true'
         run: ./gradlew :app:assembleFullRelease -PFORK_BUILD=${{ steps.version.outputs.fork_build }} --stacktrace
 
+      # Keep the APKs even if publishing fails. This build is the better part of an
+      # hour, and losing it to a bad token or a rate limit at the last step is a waste
+      # that is entirely avoidable.
+      - name: Keep the APKs regardless
+        if: steps.decide.outputs.proceed == 'true'
+        uses: actions/upload-artifact@v6
+        with:
+          name: nuviotv-fork-${{ steps.version.outputs.tag }}-apks
+          path: app/build/outputs/apk/full/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
       - name: Push the rebased branch
         if: steps.decide.outputs.proceed == 'true'
         run: git push --force-with-lease origin dev
@@ -187,7 +199,7 @@ jobs:
             echo "<!-- upstream-sha: ${UPSTREAM_SHA} -->"
           } > notes.md
 
-          gh release create "${TAG}" \
+          gh release create "${TAG}" --repo "${GITHUB_REPOSITORY}" \
             --target "$(git rev-parse HEAD)" \
             --title "${TAG}" \
             --notes-file notes.md \
