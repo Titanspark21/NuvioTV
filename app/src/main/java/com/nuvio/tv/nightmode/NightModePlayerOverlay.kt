@@ -59,6 +59,17 @@ fun NightModePlayerOverlay(
         }
     }
 
+    // Closes itself after a spell with no input. Back closes it too (see handleBackPress
+    // in PlayerScreen); this is the safety net for someone who nudges the dimming and
+    // then simply carries on watching, which is the common case.
+    var lastInteraction by remember { mutableStateOf(0) }
+    LaunchedEffect(visible, lastInteraction) {
+        if (!visible) return@LaunchedEffect
+        kotlinx.coroutines.delay(AUTO_CLOSE_MS)
+        onDismiss()
+    }
+    val markInteraction = { lastInteraction++ }
+
     PlayerOverlayScaffold(
         visible = visible,
         onDismiss = onDismiss,
@@ -88,7 +99,7 @@ fun NightModePlayerOverlay(
             ) {
                 var isToggleFocused by remember { mutableStateOf(false) }
                 Card(
-                    onClick = onToggleEnabled,
+                    onClick = { markInteraction(); onToggleEnabled() },
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusRequester(toggleFocusRequester)
@@ -157,6 +168,7 @@ fun NightModePlayerOverlay(
                                 enabled = canDecrease,
                                 focusRequester = minusFocusRequester,
                                 onClick = {
+                                    markInteraction()
                                     onStrengthChange((strengthPercent - 5).coerceAtLeast(0))
                                 }
                             )
@@ -165,6 +177,7 @@ fun NightModePlayerOverlay(
                                 enabled = canIncrease,
                                 focusRequester = plusFocusRequester,
                                 onClick = {
+                                    markInteraction()
                                     onStrengthChange((strengthPercent + 5).coerceAtMost(70))
                                 }
                             )
@@ -215,3 +228,5 @@ private fun StepCard(
         }
     }
 }
+
+private const val AUTO_CLOSE_MS = 6_000L
