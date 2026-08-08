@@ -1,0 +1,186 @@
+package com.nuvio.tv.surpriseme
+
+import com.nuvio.tv.core.network.NetworkResult
+import com.nuvio.tv.domain.model.Addon
+import com.nuvio.tv.domain.model.ContentType
+import com.nuvio.tv.domain.model.MetaPreview
+import com.nuvio.tv.domain.repository.AddonRepository
+import com.nuvio.tv.domain.repository.CatalogRepository
+import com.nuvio.tv.domain.repository.LibraryRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import javax.inject.Inject
+import javax.inject.Singleton
+
+/** Which pool the owner is asking to be surprised from. */
+enum class SurpriseKind { SHOW, MOVIE }
+
+sealed interface RollResult {
+    data class Picked(val item: MetaPreview, val sourceName: String) : RollResult
+    data object NoSources : RollResult
+    data object NothingLeft : RollResult
+    data class Failed(val message: String) : RollResult
+}
+
+/**
+ * Fork addition. Holds one "surprise me" sitting.
+ *
+ * A singleton rather than a view model because the sitting outlives the picker screen: the
+ * owner is sent to the chosen title's own detail page, and the "Roll again" button there
+ * has to continue the same rotation and keep the same already-offered list. Passing that
+ * through navigation arguments would mean threading state through upstream's detail route
+ * for no benefit.
+ */
+@Singleton
+class SurpriseMeEngine @Inject constructor(
+    private val addonRepository: AddonRepository,
+    private val catalogRepository: CatalogRepository,
+    private val libraryRepository: LibraryRepository
+) {
+    private val lock = Mutex()
+
+    private var pressIndex = 0
+    private var kind: SurpriseKind = SurpriseKind.SHOW
+    private var includeWatched: Boolean = false
+
+    /**
+     * Ids already offered this sitting. A small recommendations catalogue otherwise hands
+     * back the same title several presses running, which reads as a broken button.
+     */
+    private val alreadyOffered = mutableSetOf<String>()
+
+    private val _lastPickId = MutableStateFlow<String?>(null)
+
+    /**
+     * The title the last roll landed on. The detail screen compares this against what it
+     * is showing to decide whether to offer "Roll again" - which is what confines the
+     * button to titles the owner actually arrived at by rolling.
+     */
+    val lastPickId: StateFlow<String?> = _lastPickId.asStateFlow()
+
+    fun beginSession(kind: SurpriseKind, includeWatched: Boolean) {
+        this.kind = kind
+        this.includeWatched = includeWatched
+        alreadyOffered.clear()
+        _lastPickId.value = null
+    }
+
+    fun endSession() {
+        _lastPickId.value = null
+    }
+
+    suspend fun roll(): RollResult = lock.withLock {
+        val outcome = runCatching { rollOnce() }
+            .getOrElse { RollResult.Failed(it.message ?: "Could not reach your recommendation addons.") }
+
+        if (outcome is RollResult.Picked) {
+            alreadyOffered += outcome.item.id
+            pressIndex++
+            _lastPickId.value = outcome.item.id
+        }
+        outcome
+    }
+
+    private suspend fun rollOnce(): RollResult {
+        val contentType = when (kind) {
+            SurpriseKind.SHOW -> ContentType.SERIES
+            SurpriseKind.MOVIE -> ContentType.MOVIE
+        }
+
+        // Installed, not necessarily enabled: a recommendation addon kept off the home
+        // screen should still feed this.
+        val installed = addonRepository.getInstalledAddons().first()
+        val bySource: Map<SurpriseSource, List<Addon>> = installed
+            .mapNotNull { addon ->
+                val source = sourceOf(addon) ?: return@mapNotNull null
+                if (usableCatalogs(addon, contentType).isEmpty()) return@mapNotNull null
+                source to addon
+            }
+            .groupBy({ it.first }, { it.second })
+
+        if (bySource.isEmpty()) return RollResult.NoSources
+
+        // Walk the rotation from where the sitting left off. If whoever's turn it is has
+        // nothing usable left, fall through rather than wasting the press.
+        val order = bySource.keys
+        repeat(order.size) { attempt ->
+            val source = sourceForPress(pressIndex + attempt, order) ?: return RollResult.NoSources
+            val candidates = collectCandidates(bySource[source].orEmpty(), contentType)
+            val filtered = filterCandidates(candidates)
+            if (filtered.isNotEmpty()) {
+                return RollResult.Picked(filtered.random(), source.label)
+            }
+        }
+        return RollResult.NothingLeft
+    }
+
+    /** A handful of posters for the picker's cover art, drawn from the owner's own catalogues. */
+    suspend fun samplePosters(kind: SurpriseKind, limit: Int = 12): List<String> {
+        val contentType = when (kind) {
+            SurpriseKind.SHOW -> ContentType.SERIES
+            SurpriseKind.MOVIE -> ContentType.MOVIE
+        }
+        val installed = runCatching { addonRepository.getInstalledAddons().first() }.getOrNull().orEmpty()
+
+        // Any addon will do here - this is decoration, so the first catalogue that answers
+        // is enough and there is no reason to pay for more round trips.
+        for (addon in installed) {
+            val catalog = usableCatalogs(addon, contentType).firstOrNull() ?: continue
+            val result = runCatching {
+                catalogRepository.getCatalog(
+                    addonBaseUrl = addon.baseUrl,
+                    addonId = addon.id,
+                    addonName = addon.name,
+                    catalogId = catalog.id,
+                    catalogName = catalog.name,
+                    type = catalog.apiType
+                ).first { it !is NetworkResult.Loading }
+            }.getOrNull()
+
+            if (result is NetworkResult.Success) {
+                val posters = result.data.items.mapNotNull { it.poster }.filter { it.isNotBlank() }
+                if (posters.size >= 4) return posters.take(limit)
+            }
+        }
+        return emptyList()
+    }
+
+    private suspend fun collectCandidates(
+        addons: List<Addon>,
+        contentType: ContentType
+    ): List<MetaPreview> {
+        val out = mutableListOf<MetaPreview>()
+        for (addon in addons) {
+            for (catalog in usableCatalogs(addon, contentType)) {
+                val result = catalogRepository.getCatalog(
+                    addonBaseUrl = addon.baseUrl,
+                    addonId = addon.id,
+                    addonName = addon.name,
+                    catalogId = catalog.id,
+                    catalogName = catalog.name,
+                    type = catalog.apiType
+                ).first { it !is NetworkResult.Loading }
+
+                if (result is NetworkResult.Success) {
+                    out += result.data.items
+                }
+            }
+        }
+        return out.distinctBy { it.id }
+    }
+
+    private suspend fun filterCandidates(candidates: List<MetaPreview>): List<MetaPreview> {
+        val notRepeated = candidates.filterNot { it.id in alreadyOffered }
+        if (includeWatched) return notRepeated
+
+        // "Only new" means not already in the library - the signal this app actually holds
+        // for a title as a whole.
+        return notRepeated.filterNot { item ->
+            libraryRepository.isInLibrary(item.id, item.rawType).first()
+        }
+    }
+}
