@@ -10,10 +10,10 @@ import com.nuvio.tv.domain.model.ContentType
  */
 
 /** A recommendation provider, in the order the owner asked to see them. */
-enum class SurpriseSource(val key: String, val picksPerCycle: Int) {
-    BINGE_CAT("bingecat", 2),
-    SIMKL("simkl", 2),
-    TRAKT("trakt", 1)
+enum class SurpriseSource(val key: String, val label: String, val picksPerCycle: Int) {
+    BINGE_CAT("bingecat", "BingeCat", 2),
+    SIMKL("simkl", "Simkl", 2),
+    TRAKT("trakt", "Trakt", 1)
 }
 
 /**
