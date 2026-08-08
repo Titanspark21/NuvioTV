@@ -141,6 +141,9 @@ jobs:
           # sdk.dir is machine-specific; the runner supplies its own.
           sed -i -E '/^[[:space:]]*sdk\.dir[[:space:]]*=/d' local.properties
           {
+            # A leading newline: the stored secret may not end in one, and without this
+            # the first line below would be glued onto the last existing property.
+            echo
             echo "NUVIO_RELEASE_STORE_FILE=${keystore_path}"
             echo "NUVIO_RELEASE_KEY_ALIAS=${RELEASE_KEY_ALIAS}"
             echo "NUVIO_RELEASE_KEY_PASSWORD=${RELEASE_KEY_PASSWORD}"
