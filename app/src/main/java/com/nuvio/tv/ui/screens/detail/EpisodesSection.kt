@@ -115,11 +115,14 @@ fun SeasonTabs(
     downFocusRequester: FocusRequester? = null,
     isFocusEnabled: Boolean = true
 ) {
-    // Move season 0 (specials) to the end
+    // Move season 0 (specials) to the end, and the fork's virtual "Top rated" tab
+    // (TOP_RATED_SEASON, a negative sentinel) after that - it is not a season, so it
+    // belongs past the real ones rather than sorted in among them.
     val sortedSeasons = remember(seasons) {
         val regularSeasons = seasons.filter { it > 0 }.sorted()
         val specials = seasons.filter { it == 0 }
-        regularSeasons + specials
+        val virtual = seasons.filter { it < 0 }
+        regularSeasons + specials + virtual
     }
 
     val tabShape = remember { RoundedCornerShape(20.dp) }
@@ -237,7 +240,11 @@ fun SeasonTabs(
                 scale = tabScale
             ) {
                 Text(
-                    text = if (season == 0) stringResource(R.string.episodes_specials) else stringResource(R.string.episodes_season, season),
+                    text = when {
+                        season == TOP_RATED_SEASON -> stringResource(R.string.episodes_top_rated)
+                        season == 0 -> stringResource(R.string.episodes_specials)
+                        else -> stringResource(R.string.episodes_season, season)
+                    },
                     style = tabTextStyle,
                     color = when {
                         isFocused -> NuvioTheme.colors.OnSecondary
