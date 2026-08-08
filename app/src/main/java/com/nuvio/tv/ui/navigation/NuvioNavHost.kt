@@ -1065,6 +1065,20 @@ fun NuvioNavHost(
             )
         }
 
+        // Fork addition. A route rather than a dialog raised from the sidebar, because
+        // the sidebar's job here is to navigate; back simply pops it like any other screen.
+        composable(Screen.SurpriseMe.route) {
+            com.nuvio.tv.surpriseme.SurpriseMeDialog(
+                onDismiss = { navController.popBackStack() },
+                onOpenTitle = { item ->
+                    navController.popBackStack()
+                    navController.navigate(
+                        Screen.Detail.createRoute(item.id, item.rawType)
+                    )
+                }
+            )
+        }
+
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
