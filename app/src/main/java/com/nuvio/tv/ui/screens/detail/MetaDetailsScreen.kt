@@ -118,6 +118,8 @@ import com.nuvio.tv.domain.model.MDBListRatings
 import com.nuvio.tv.domain.model.NextToWatch
 import com.nuvio.tv.domain.model.TraktCommentReview
 import com.nuvio.tv.domain.model.Video
+import com.nuvio.tv.shuffleplay.ShufflePlaySession
+import com.nuvio.tv.ui.screens.player.PlayerNextEpisodeRules
 import com.nuvio.tv.domain.model.WatchProgress
 import com.nuvio.tv.ui.components.ErrorState
 import com.nuvio.tv.ui.components.MetaDetailsSkeleton
@@ -1464,6 +1466,9 @@ private fun MetaDetailsContent(
     // Stable hero play callback
     val heroPlayClick = remember(heroVideo, meta.id, onEpisodeClick, onPlayClick) {
         {
+            // Playing normally ends any shuffle run, so the end card goes back to
+            // offering the next episode in order.
+            ShufflePlaySession.stop()
             markHeroRestore()
             if (heroVideo != null) {
                 onEpisodeClick(heroVideo)
@@ -1495,6 +1500,9 @@ private fun MetaDetailsContent(
 
     val episodeClick = remember(onEpisodeClick) {
         { video: Video ->
+            // Choosing an episode by hand is the same signal as pressing play: the run
+            // is over and ordinary next-episode behaviour resumes.
+            ShufflePlaySession.stop()
             markEpisodeRestore(video.id)
             onEpisodeClick(video)
         }
@@ -1506,23 +1514,44 @@ private fun MetaDetailsContent(
         }
     }
 
-    // Fork addition: shuffle button in the hero row. Specials (season 0) and episodes the
-    // addon has flagged unavailable are excluded so the pick is always something playable.
+    // Fork addition: shuffle button in the hero row. Specials (season 0), episodes the
+    // addon flagged unavailable, and episodes that have not aired are all excluded - an
+    // unaired pick has no streams, so the addons search, find nothing, and the wait is
+    // spent on a guaranteed failure.
     val randomEpisodePool = remember(meta.videos) {
         meta.videos.filter { video ->
             video.season != null && video.season != 0 &&
                 video.episode != null &&
-                video.available != false
+                video.available != false &&
+                PlayerNextEpisodeRules.hasEpisodeAired(video.released)
         }
     }
-    val randomEpisodeClick = remember(randomEpisodePool, onEpisodeClick) {
+    val randomEpisodeClick = remember(randomEpisodePool, onEpisodeClick, meta.id) {
         if (randomEpisodePool.isEmpty()) {
             null
         } else {
             {
                 val video = randomEpisodePool.random()
+                // From here, "next episode" means another random one until the owner
+                // plays something normally.
+                ShufflePlaySession.start(meta.id)
+                ShufflePlaySession.remember(video.id)
                 markEpisodeRestore(video.id)
                 onEpisodeClick(video)
+            }
+        }
+    }
+    // Long-press: same random pick, but stop at the stream list so the owner chooses.
+    val randomEpisodeLongPress = remember(randomEpisodePool, onEpisodeManualPlayClick, meta.id) {
+        if (randomEpisodePool.isEmpty()) {
+            null
+        } else {
+            {
+                val video = randomEpisodePool.random()
+                ShufflePlaySession.start(meta.id)
+                ShufflePlaySession.remember(video.id)
+                markEpisodeRestore(video.id)
+                onEpisodeManualPlayClick(video)
             }
         }
     }
@@ -1751,6 +1780,7 @@ private fun MetaDetailsContent(
                         hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
                         onRandomEpisodeClick = randomEpisodeClick,
+                        onRandomEpisodeLongPress = if (showManualPlayOption) randomEpisodeLongPress else null,
                         onRollAgainClick = if (showRollAgain) rollAgainViewModel::rollAgain else null,
                         isRollingAgain = rollAgainState.isRolling,
                         playButtonFocusRequester = heroPlayFocusRequester,
