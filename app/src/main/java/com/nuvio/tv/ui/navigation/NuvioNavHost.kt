@@ -1068,13 +1068,15 @@ fun NuvioNavHost(
         // Fork addition. A route rather than a dialog raised from the sidebar, because
         // the sidebar's job here is to navigate; back simply pops it like any other screen.
         composable(Screen.SurpriseMe.route) {
-            com.nuvio.tv.surpriseme.SurpriseMeDialog(
-                onDismiss = { navController.popBackStack() },
-                onOpenTitle = { item ->
-                    navController.popBackStack()
-                    navController.navigate(
-                        Screen.Detail.createRoute(item.id, item.rawType)
-                    )
+            com.nuvio.tv.surpriseme.SurpriseMeScreen(
+                onBack = { navController.popBackStack() },
+                onOpenTitle = { itemId, itemType ->
+                    // Replace the picker rather than stacking on it: from the title's own
+                    // page, Back should go where the owner came from, not to a chooser
+                    // they have already answered.
+                    navController.navigate(Screen.Detail.createRoute(itemId, itemType)) {
+                        popUpTo(Screen.SurpriseMe.route) { inclusive = true }
+                    }
                 }
             )
         }
