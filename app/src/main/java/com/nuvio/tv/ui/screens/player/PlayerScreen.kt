@@ -58,6 +58,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Brightness4
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Speed
@@ -162,6 +163,10 @@ fun PlayerScreen(
     var reportCodeVisible by remember { mutableStateOf(false) }
     var exitDispatched by remember { mutableStateOf(false) }
     var externalHandoffInProgress by remember { mutableStateOf(false) }
+    val nightModeViewModel: com.nuvio.tv.nightmode.NightModeViewModel = hiltViewModel()
+    val nightModeState by nightModeViewModel.nightModeManager.state.collectAsState()
+    var showNightModeOverlay by remember { mutableStateOf(false) }
+
 
     val exitPlayer: () -> Unit = exitPlayer@{
         if (exitDispatched) return@exitPlayer
@@ -1035,6 +1040,7 @@ fun PlayerScreen(
                     restoreStreamInfoFocus = true
                     viewModel.onEvent(PlayerEvent.OnShowStreamInfo)
                 },
+                onShowNightMode = { showNightModeOverlay = true },
                 onResetHideTimer = {
                     viewModel.scheduleHideControls()
                     viewModel.onUserInteraction()
@@ -1342,6 +1348,18 @@ fun PlayerScreen(
                 onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay) }
             )
         }
+
+        com.nuvio.tv.nightmode.NightModePlayerOverlay(
+            visible = showNightModeOverlay,
+            enabled = nightModeState.enabled,
+            strengthPercent = nightModeState.strength,
+            onToggleEnabled = { nightModeViewModel.nightModeManager.setEnabled(!nightModeState.enabled) },
+            onStrengthChange = { nightModeViewModel.nightModeManager.setStrength(it) },
+            onDismiss = { showNightModeOverlay = false },
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(2.7f)
+        )
     }
 }
 
@@ -1681,6 +1699,7 @@ private fun PlayerControlsOverlay(
     onToggleMoreActions: () -> Unit,
     onOpenInExternalPlayer: () -> Unit,
     onShowStreamInfo: () -> Unit,
+    onShowNightMode: () -> Unit,
     onResetHideTimer: () -> Unit,
     onHideControls: () -> Unit,
     onBack: () -> Unit,
@@ -1963,6 +1982,14 @@ private fun PlayerControlsOverlay(
                                 onClick = {
                                     onOpenInExternalPlayer()
                                 },
+                                upFocusRequester = progressBarFocusRequester,
+                                onDownKey = onHideControls,
+                                onFocused = onResetHideTimer
+                            )
+                            ControlButton(
+                                icon = Icons.Default.Brightness4,
+                                contentDescription = stringResource(R.string.night_mode_title),
+                                onClick = onShowNightMode,
                                 upFocusRequester = progressBarFocusRequester,
                                 onDownKey = onHideControls,
                                 onFocused = onResetHideTimer
