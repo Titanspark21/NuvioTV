@@ -1376,6 +1376,21 @@ private fun MetaDetailsContent(
         availablePeopleTabs.isNotEmpty() -> availablePeopleTabs.first()
         else -> PeopleSectionTab.RATINGS
     }
+    // Fork: "Roll again" is offered only while this is the title Surprise me just landed
+    // on. Open anything else and the engine's last pick no longer matches, so the button
+    // disappears rather than becoming a permanent fixture on every detail page.
+    val rollAgainViewModel: com.nuvio.tv.surpriseme.SurpriseRollAgainViewModel = hiltViewModel()
+    val rollAgainState by rollAgainViewModel.state.collectAsStateWithLifecycle()
+    val lastSurprisePickId by rollAgainViewModel.lastPickId.collectAsStateWithLifecycle()
+    val showRollAgain = lastSurprisePickId != null && lastSurprisePickId == meta.id
+
+    LaunchedEffect(rollAgainState.navigateTo) {
+        rollAgainState.navigateTo?.let { next ->
+            rollAgainViewModel.onNavigationHandled()
+            onNavigateToDetail(next.id, next.rawType, null)
+        }
+    }
+
     var activePeopleTab by rememberSaveable(meta.id) { mutableStateOf(initialPeopleTab) }
     var seasonOptionsDialogSeason by remember { mutableStateOf<Int?>(null) }
     // Tracks whether the initial auto-scroll to the "next to play" episode has fired.
@@ -1400,8 +1415,16 @@ private fun MetaDetailsContent(
                 ?: nextToWatch?.let { ntw -> episodesForSeason.firstOrNull { it.season == ntw.nextSeason && it.episode == ntw.nextEpisode }?.id }
                 ?: defaultSeriesVideo?.id?.takeIf { defaultId -> episodesForSeason.any { it.id == defaultId } }
         }
-        val preferredEpisodeId = lastFocusedEpisodeIdBySeason[selectedSeason]
-            ?: nextEpisodeId?.takeIf { episodesForSeason.any { ep -> ep.id == it } }
+        // Fork: the Top rated list is ordered by rating, so "carry on where you were"
+        // is meaningless there and actively unhelpful - the next-to-watch episode sits
+        // somewhere in the middle, and landing on it buries the highest rated episodes
+        // off to the left. Always open it on the best one.
+        val preferredEpisodeId = if (selectedSeason == TOP_RATED_SEASON) {
+            null
+        } else {
+            lastFocusedEpisodeIdBySeason[selectedSeason]
+                ?: nextEpisodeId?.takeIf { episodesForSeason.any { ep -> ep.id == it } }
+        }
         (preferredEpisodeId?.let { seasonEpisodeFocusRequesters[it] })
             ?: episodesForSeason.firstOrNull()?.id?.let { seasonEpisodeFocusRequesters[it] }
     }
@@ -1750,6 +1773,8 @@ private fun MetaDetailsContent(
                         hideLogoDuringTrailer = hideLogoDuringTrailer,
                         isTrailerPlaying = isTrailerPlaying,
                         onRandomEpisodeClick = randomEpisodeClick,
+                        onRollAgainClick = if (showRollAgain) rollAgainViewModel::rollAgain else null,
+                        isRollingAgain = rollAgainState.isRolling,
                         playButtonFocusRequester = heroPlayFocusRequester,
                         onHeroActionFocused = {
                             if (listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 0) {
@@ -1829,7 +1854,10 @@ private fun MetaDetailsContent(
                             onEpisodeFocused = { episodeId ->
                                 lastFocusedEpisodeIdBySeason[selectedSeason] = episodeId
                             },
-                            scrollToEpisodeId = if (lastFocusedEpisodeIdBySeason[selectedSeason] != null) {
+                            scrollToEpisodeId = if (selectedSeason == TOP_RATED_SEASON) {
+                                // Ordered by rating: start at the best, never mid-list.
+                                null
+                            } else if (lastFocusedEpisodeIdBySeason[selectedSeason] != null) {
                                 null
                             } else if (!initialEpisodeScrollDone && pendingRestoreType != RestoreTarget.EPISODE) {
                                 val ntwId = nextToWatch?.nextVideoId
