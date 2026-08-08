@@ -148,6 +148,16 @@ jobs:
             echo "NUVIO_RELEASE_KEY_ALIAS=${RELEASE_KEY_ALIAS}"
             echo "NUVIO_RELEASE_KEY_PASSWORD=${RELEASE_KEY_PASSWORD}"
             echo "NUVIO_RELEASE_STORE_PASSWORD=${RELEASE_STORE_PASSWORD}"
+
+            # Dolby Vision Profile 7 -> 8.1 conversion, matching what upstream ships.
+            # Profile 7 is the dual-layer flavour found in UHD Blu-ray remuxes, which no
+            # Android device decodes directly; libdovi rewrites the metadata into 8.1 so
+            # the hardware can play it with dynamic DV intact instead of dropping to
+            # HDR10. Not secret, so it lives here rather than in the stored properties.
+            echo "DOVI_NATIVE_ENABLED=true"
+            echo "DOVI_EXTRACTOR_HOOK_READY=true"
+            echo "DOVI_ENABLE_REAL_LINK=true"
+            echo "DOVI_LIBDOVI_PREBUILT_ROOT=DV7/libdovi"
           } >> local.properties
 
       - name: Accept SDK licences
