@@ -150,14 +150,32 @@ android {
         buildConfigField("String", "SENTRY_DSN", buildConfigString(sentryDsn))
 
         // In-app updater (GitHub Releases)
-        buildConfigField("String", "GITHUB_OWNER", "\"tapframe\"")
+        // Fork: the in-app updater must check this fork's releases, not upstream's, or it
+        // would offer an APK signed with a different key that Android refuses to install
+        // (and which would not contain the shuffle button).
+        buildConfigField("String", "GITHUB_OWNER", "\"Titanspark21\"")
         buildConfigField("String", "GITHUB_REPO", "\"NuvioTV\"")
+
+        // Fork: -PFORK_BUILD=<n> appends a build counter to the upstream version.
+        // The updater compares the numeric parts of the version, ignoring words like
+        // "beta", so 0.8.2-beta.2 reads as [0,8,2,2] and beats [0,8,2,1]. versionCode
+        // has to rise too or Android refuses the install as a downgrade.
+        val forkBuild = (providers.gradleProperty("FORK_BUILD").orNull ?: env("FORK_BUILD"))
+            ?.trim()?.toIntOrNull()
+        if (forkBuild != null) {
+            versionName = "${versionName}.${forkBuild}"
+            versionCode = (versionCode ?: 1) * 100 + forkBuild
+        }
     }
 
     flavorDimensions += "distribution"
     productFlavors {
         create("full") {
             dimension = "distribution"
+            // Fork: its own package id and launcher name so it installs alongside the
+            // official app rather than replacing it. Nothing in the app keys off the
+            // package name, and the account backend is per-user, so sync is unaffected.
+            applicationIdSuffix = ".shuffle"
             buildConfigField("boolean", "FEATURE_PLUGINS_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_UPDATES_ENABLED", "true")
             buildConfigField("boolean", "FEATURE_IN_APP_TRAILERS_ENABLED", "true")
