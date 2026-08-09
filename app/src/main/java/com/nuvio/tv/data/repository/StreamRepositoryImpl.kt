@@ -53,7 +53,8 @@ class StreamRepositoryImpl @Inject constructor(
     private val debridSettingsDataStore: DebridSettingsDataStore,
     private val tmdbService: TmdbService,
     private val debridStreamPresentation: DebridStreamPresentation,
-    private val localDebridAvailabilityService: LocalDebridAvailabilityService
+    private val localDebridAvailabilityService: LocalDebridAvailabilityService,
+    private val addonSpeedLog: com.nuvio.tv.addonspeed.AddonSpeedLog
 ) : StreamRepository {
     private val streamSearchSessions = StreamSearchSessionCache()
     private val localPluginSearchPaused = MutableStateFlow(false)
@@ -190,7 +191,17 @@ class StreamRepositoryImpl @Inject constructor(
                 streamAddons.forEach { addon ->
                     launch {
                         try {
+                            // Fork: time each addon's stream lookup. Measured around the
+                            // request itself so the number is the addon's latency, not the
+                            // app's processing of what it returned.
+                            val startedAt = System.currentTimeMillis()
                             val streamsResult = getStreamsFromAddon(addon.baseUrl, type, videoId)
+                            addonSpeedLog.record(
+                                addonName = addon.displayName,
+                                kind = com.nuvio.tv.addonspeed.AddonCallKind.STREAM,
+                                durationMs = System.currentTimeMillis() - startedAt,
+                                success = streamsResult is NetworkResult.Success
+                            )
                             when (streamsResult) {
                                 is NetworkResult.Success -> {
                                     if (streamsResult.data.isNotEmpty()) {
