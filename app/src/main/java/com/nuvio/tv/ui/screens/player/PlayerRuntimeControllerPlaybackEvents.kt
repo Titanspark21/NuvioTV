@@ -1624,6 +1624,18 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
         PlayerEvent.OnPlayNextEpisode -> {
             playNextEpisode(userInitiated = true)
         }
+        PlayerEvent.OnPickNextEpisodeStream -> {
+            // Skip auto-selection entirely and show the list for the next episode.
+            nextEpisodeAutoPlayJob?.cancel()
+            clearNextEpisodePrefetch()
+            _uiState.update {
+                it.copy(
+                    postPlayMode = null,
+                    postPlayDismissedForCurrentEpisode = true,
+                )
+            }
+            nextEpisodeVideo?.let { showEpisodeStreamPicker(video = it, forceRefresh = false) }
+        }
         PlayerEvent.OnDismissNextEpisodeCard -> {
             nextEpisodeAutoPlayJob?.cancel()
             nextEpisodeAutoPlayJob = null
