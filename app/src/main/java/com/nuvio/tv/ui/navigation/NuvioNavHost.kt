@@ -1074,6 +1074,10 @@ fun NuvioNavHost(
             )
         }
 
+        composable(Screen.AddonSpeed.route) {
+            com.nuvio.tv.addonspeed.AddonSpeedScreen()
+        }
+
         composable(Screen.Settings.route) {
             SettingsScreen(
                 showBuiltInHeader = !hideBuiltInHeaders,
@@ -1119,7 +1123,8 @@ fun NuvioNavHost(
 
         composable(Screen.PlaybackSettings.route) {
             PlaybackSettingsScreen(
-                onBackPress = { navController.popBackStack() }
+                onBackPress = { navController.popBackStack() },
+                onNavigateToAddonSpeed = { navController.navigate(Screen.AddonSpeed.route) }
             )
         }
 
