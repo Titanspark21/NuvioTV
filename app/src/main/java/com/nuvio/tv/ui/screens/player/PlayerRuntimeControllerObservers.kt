@@ -367,6 +367,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             nextEpisodeThresholdModeSetting = settings.nextEpisodeThresholdMode
             nextEpisodeThresholdPercentSetting = settings.nextEpisodeThresholdPercent
             nextEpisodeThresholdMinutesBeforeEndSetting = settings.nextEpisodeThresholdMinutesBeforeEnd
+            nextEpisodePrefetchLeadSecondsSetting = settings.nextEpisodePrefetchLeadSeconds
+            nextEpisodeSilentAutoPlaySetting = settings.nextEpisodeSilentAutoPlay
             stillWatchingEnabledSetting = settings.stillWatchingEnabled
             stillWatchingEpisodeThresholdSetting = settings.stillWatchingEpisodeThreshold
 
