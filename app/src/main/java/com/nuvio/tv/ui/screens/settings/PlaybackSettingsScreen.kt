@@ -97,7 +97,8 @@ import androidx.compose.material.icons.filled.Image
 @Composable
 fun PlaybackSettingsScreen(
     viewModel: PlaybackSettingsViewModel = hiltViewModel(),
-    onBackPress: () -> Unit = {}
+    onBackPress: () -> Unit = {},
+    onNavigateToAddonSpeed: () -> Unit = {}
 ) {
     BackHandler { onBackPress() }
 
@@ -105,14 +106,18 @@ fun PlaybackSettingsScreen(
         title = stringResource(R.string.playback_title),
         subtitle = stringResource(R.string.playback_subtitle)
     ) {
-        PlaybackSettingsContent(viewModel = viewModel)
+        PlaybackSettingsContent(
+            viewModel = viewModel,
+            onNavigateToAddonSpeed = onNavigateToAddonSpeed
+        )
     }
 }
 
 @Composable
 fun PlaybackSettingsContent(
     viewModel: PlaybackSettingsViewModel = hiltViewModel(),
-    initialFocusRequester: FocusRequester? = null
+    initialFocusRequester: FocusRequester? = null,
+    onNavigateToAddonSpeed: () -> Unit = {}
 ) {
     val playerSettings by viewModel.playerSettings.collectAsStateWithLifecycle(initialValue = PlayerSettings())
     val torrentSettings by viewModel.torrentSettingsFlow.collectAsStateWithLifecycle(
@@ -250,6 +255,7 @@ fun PlaybackSettingsContent(
                 onSetNextEpisodeThresholdMinutesBeforeEnd = { minutes ->
                     coroutineScope.launch { viewModel.setNextEpisodeThresholdMinutesBeforeEnd(minutes) }
                 },
+                onNavigateToAddonSpeed = onNavigateToAddonSpeed,
                 onSetNextEpisodePrefetchLeadSeconds = { seconds ->
                     coroutineScope.launch { viewModel.setNextEpisodePrefetchLeadSeconds(seconds) }
                 },
