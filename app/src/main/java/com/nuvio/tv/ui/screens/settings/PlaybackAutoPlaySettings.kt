@@ -89,6 +89,7 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetStreamAutoPlayReuseBingeGroup: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
+    onNavigateToAddonSpeed: () -> Unit,
     onSetNextEpisodePrefetchLeadSeconds: (Int) -> Unit,
     onSetNextEpisodeSilentAutoPlay: (Boolean) -> Unit,
     onSetStreamAutoPlayTimeoutSeconds: (Int) -> Unit,
@@ -291,6 +292,17 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 )
             }
         }
+    }
+
+    // Fork: how fast each addon actually answers, measured rather than guessed.
+    item(key = "addon_speed") {
+        NavigationSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.addon_speed_title),
+            subtitle = stringResource(R.string.addon_speed_sub),
+            onClick = onNavigateToAddonSpeed,
+            onFocused = onItemFocused
+        )
     }
 
     // Fork: the two controls behind the "no waiting" behaviour. The lead time decides
