@@ -1098,7 +1098,8 @@ fun NuvioNavHost(
                 },
                 onNavigateToLicensesAttributions = {
                     navController.navigate(Screen.LicensesAttributions.route)
-                }
+                },
+                onNavigateToAddonSpeed = { navController.navigate(Screen.AddonSpeed.route) }
             )
         }
 
