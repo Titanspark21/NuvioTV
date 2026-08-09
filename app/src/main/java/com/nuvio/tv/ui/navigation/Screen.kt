@@ -137,6 +137,9 @@ sealed class Screen(val route: String) {
 
     /** Fork addition: the "Surprise me" picker. */
     data object SurpriseMe : Screen("surpriseme")
+
+    /** Fork addition: addon speed history and live test. */
+    data object AddonSpeed : Screen("addonspeed")
     data object Settings : Screen("settings")
     data object Tracking : Screen("trakt")
     data object TmdbSettings : Screen("tmdb_settings")
