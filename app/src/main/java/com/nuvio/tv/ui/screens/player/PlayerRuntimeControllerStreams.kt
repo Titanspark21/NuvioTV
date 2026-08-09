@@ -1510,7 +1510,17 @@ internal suspend fun PlayerRuntimeController.resolveDirectDebridStreamIfNeeded(
     }
 }
 
-internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = false) {
+/**
+ * Fork: with [prefetchOnly], this runs the identical selection pipeline while the current
+ * episode is still playing, but displays nothing and plays nothing - it simply banks the
+ * chosen stream. Reusing this function instead of copying the selection logic means the
+ * stream chosen early is chosen by exactly the same rules as one chosen at the threshold;
+ * a parallel implementation would drift out of step the first time either changed.
+ */
+internal fun PlayerRuntimeController.playNextEpisode(
+    userInitiated: Boolean = false,
+    prefetchOnly: Boolean = false
+) {
     val nextVideo = nextEpisodeVideo ?: return
     val type = contentType ?: return
 
@@ -1520,7 +1530,7 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
         return
     }
     val activeAutoPlay = state.postPlayMode as? PostPlayMode.AutoPlay
-    if (activeAutoPlay != null &&
+    if (!prefetchOnly && activeAutoPlay != null &&
         (activeAutoPlay.searching || activeAutoPlay.countdownSec != null)
     ) {
         return
@@ -1531,18 +1541,20 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
         return
     }
 
-    val episodeForMode = state.nextEpisode ?: nextInfo
-    _uiState.update {
-        it.copy(
-            postPlayMode = PostPlayMode.AutoPlay(
-                nextEpisode = episodeForMode,
-                searching = true,
-            ),
-        )
+    if (!prefetchOnly) {
+        val episodeForMode = state.nextEpisode ?: nextInfo
+        _uiState.update {
+            it.copy(
+                postPlayMode = PostPlayMode.AutoPlay(
+                    nextEpisode = episodeForMode,
+                    searching = true,
+                ),
+            )
+        }
+        nextEpisodeAutoPlayJob?.cancel()
     }
 
-    nextEpisodeAutoPlayJob?.cancel()
-    nextEpisodeAutoPlayJob = scope.launch {
+    val launched = scope.launch {
         try {
             streamRepository.setLocalPluginSearchPaused(false)
             val playerSettings = playerSettingsDataStore.playerSettings.first()
@@ -1722,6 +1734,15 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             val streamToPlay = selectedStream?.let {
                 resolveDirectDebridStreamIfNeeded(it, nextVideo.season, nextVideo.episode)
             }
+
+            if (prefetchOnly) {
+                // Bank it and stop. Nothing is shown and nothing plays; the threshold
+                // will find this waiting for it.
+                prefetchedNextStream = streamToPlay
+                prefetchedNextVideoId = nextVideo.id
+                return@launch
+            }
+
             if (streamToPlay != null) {
                 val sourceName = (streamToPlay.name?.takeIf { it.isNotBlank() } ?: streamToPlay.addonName).trim()
                 for (remaining in 3 downTo 1) {
@@ -1765,6 +1786,9 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
+            // A prefetch that fails is not an error the owner should ever see: the
+            // threshold simply falls back to searching as it always did.
+            if (prefetchOnly) return@launch
             _uiState.update {
                 it.copy(
                     postPlayMode = null,
@@ -1774,6 +1798,32 @@ internal fun PlayerRuntimeController.playNextEpisode(userInitiated: Boolean = fa
             showEpisodeStreamPicker(video = nextVideo, forceRefresh = false)
         }
     }
+
+    if (prefetchOnly) {
+        nextEpisodePrefetchJob = launched
+    } else {
+        nextEpisodeAutoPlayJob = launched
+    }
+}
+
+/**
+ * Fork: start choosing the next episode's stream now, so the threshold has one ready.
+ * Cheap to call repeatedly - it does nothing if a prefetch is already running or already
+ * holds a stream for this episode.
+ */
+internal fun PlayerRuntimeController.prefetchNextEpisodeStream() {
+    val nextVideo = nextEpisodeVideo ?: return
+    if (prefetchedNextVideoId == nextVideo.id) return
+    if (nextEpisodePrefetchJob?.isActive == true) return
+    playNextEpisode(prefetchOnly = true)
+}
+
+/** Drops a banked stream, e.g. when the next episode changes under us. */
+internal fun PlayerRuntimeController.clearNextEpisodePrefetch() {
+    nextEpisodePrefetchJob?.cancel()
+    nextEpisodePrefetchJob = null
+    prefetchedNextStream = null
+    prefetchedNextVideoId = null
 }
 
 private fun PlayerRuntimeController.playNextCloudLibraryFile(

@@ -250,6 +250,12 @@ fun PlaybackSettingsContent(
                 onSetNextEpisodeThresholdMinutesBeforeEnd = { minutes ->
                     coroutineScope.launch { viewModel.setNextEpisodeThresholdMinutesBeforeEnd(minutes) }
                 },
+                onSetNextEpisodePrefetchLeadSeconds = { seconds ->
+                    coroutineScope.launch { viewModel.setNextEpisodePrefetchLeadSeconds(seconds) }
+                },
+                onSetNextEpisodeSilentAutoPlay = { enabled ->
+                    coroutineScope.launch { viewModel.setNextEpisodeSilentAutoPlay(enabled) }
+                },
                 onSetStreamAutoPlayTimeoutSeconds = { seconds ->
                     coroutineScope.launch { viewModel.setStreamAutoPlayTimeoutSeconds(seconds) }
                 },
