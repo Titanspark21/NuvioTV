@@ -2976,6 +2976,11 @@
     <string name="stream_test_video_bitrate">Average Video Bitrate: %1$s</string>
     <string name="stream_test_error_connection">Connection failed. The last played stream link may have expired or is unreachable. Please play the video again and retry.</string>
     <string name="episodes_top_rated">Top rated</string>
+    <string name="autoplay_prefetch_lead_title">Find the next stream early</string>
+    <string name="autoplay_prefetch_lead_sub">How long before the end to start looking, so the next episode can begin without a pause</string>
+    <string name="autoplay_prefetch_lead_off">Off</string>
+    <string name="autoplay_silent_title">Continue without asking</string>
+    <string name="autoplay_silent_sub">When a stream is already found, play it straight away instead of showing the countdown</string>
     <string name="surprise_me_title">Surprise me</string>
     <string name="surprise_me_subtitle">Pick something from your recommendation addons</string>
     <string name="surprise_me_shows">Shows</string>

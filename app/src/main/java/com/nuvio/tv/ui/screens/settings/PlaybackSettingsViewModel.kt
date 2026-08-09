@@ -497,6 +497,14 @@ class PlaybackSettingsViewModel @Inject constructor(
         playerSettingsDataStore.setNextEpisodeThresholdMinutesBeforeEnd(minutes)
     }
 
+    suspend fun setNextEpisodePrefetchLeadSeconds(seconds: Int) {
+        playerSettingsDataStore.setNextEpisodePrefetchLeadSeconds(seconds)
+    }
+
+    suspend fun setNextEpisodeSilentAutoPlay(enabled: Boolean) {
+        playerSettingsDataStore.setNextEpisodeSilentAutoPlay(enabled)
+    }
+
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
         playerSettingsDataStore.setStreamReuseLastLinkEnabled(enabled)
     }
