@@ -270,6 +270,10 @@ data class PlayerSettings(
     val nextEpisodeThresholdMode: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE,
     val nextEpisodeThresholdPercent: Float = 99f,
     val nextEpisodeThresholdMinutesBeforeEnd: Float = 2f,
+    /** Fork: seconds before the threshold at which the next stream starts being chosen. 0 disables. */
+    val nextEpisodePrefetchLeadSeconds: Int = DEFAULT_NEXT_EPISODE_PREFETCH_LEAD_SECONDS,
+    /** Fork: play a stream chosen ahead of time immediately, with no card and no countdown. */
+    val nextEpisodeSilentAutoPlay: Boolean = true,
     val streamReuseLastLinkEnabled: Boolean = false,
     val streamReuseLastLinkCacheHours: Int = 24,
     val externalPlayerForwardSubtitles: Boolean = false,
@@ -296,6 +300,10 @@ data class PlayerSettings(
     val nuvioPerformanceModeEnabled: Boolean = DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED
 ) {
     companion object {
+        const val DEFAULT_NEXT_EPISODE_PREFETCH_LEAD_SECONDS = 30
+        const val MIN_NEXT_EPISODE_PREFETCH_LEAD_SECONDS = 0
+        const val MAX_NEXT_EPISODE_PREFETCH_LEAD_SECONDS = 180
+
         const val DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD = 3
         const val MIN_STILL_WATCHING_EPISODE_THRESHOLD = 2
         const val MAX_STILL_WATCHING_EPISODE_THRESHOLD = 6
@@ -509,6 +517,9 @@ class PlayerSettingsDataStore @Inject constructor(
     private val nextEpisodeThresholdPercentLegacyKey = intPreferencesKey("next_episode_threshold_percent")
     private val nextEpisodeThresholdMinutesBeforeEndLegacyKey = intPreferencesKey("next_episode_threshold_minutes_before_end")
     private val nextEpisodeThresholdPercentKey = floatPreferencesKey("next_episode_threshold_percent_v2")
+    // Fork
+    private val nextEpisodePrefetchLeadSecondsKey = intPreferencesKey("next_episode_prefetch_lead_seconds")
+    private val nextEpisodeSilentAutoPlayKey = booleanPreferencesKey("next_episode_silent_auto_play")
     private val nextEpisodeThresholdMinutesBeforeEndKey = floatPreferencesKey("next_episode_threshold_minutes_before_end_v2")
     private val streamReuseLastLinkEnabledKey = booleanPreferencesKey("stream_reuse_last_link_enabled")
     private val streamReuseLastLinkCacheHoursKey = intPreferencesKey("stream_reuse_last_link_cache_hours")
@@ -869,13 +880,20 @@ class PlayerSettingsDataStore @Inject constructor(
                 nextEpisodeThresholdMode = prefs[nextEpisodeThresholdModeKey]?.let {
                     runCatching { NextEpisodeThresholdMode.valueOf(it) }.getOrDefault(NextEpisodeThresholdMode.PERCENTAGE)
                 } ?: NextEpisodeThresholdMode.PERCENTAGE,
-                nextEpisodeThresholdPercent = normalizeHalfStep(
+                nextEpisodeThresholdPercent = normalizeTenthStep(
                     value = prefs[nextEpisodeThresholdPercentKey]
                         ?: prefs[nextEpisodeThresholdPercentLegacyKey]?.toFloat()
                         ?: 99f,
                     min = 97f,
                     max = 100f
                 ),
+                nextEpisodePrefetchLeadSeconds = (prefs[nextEpisodePrefetchLeadSecondsKey]
+                    ?: PlayerSettings.DEFAULT_NEXT_EPISODE_PREFETCH_LEAD_SECONDS)
+                    .coerceIn(
+                        PlayerSettings.MIN_NEXT_EPISODE_PREFETCH_LEAD_SECONDS,
+                        PlayerSettings.MAX_NEXT_EPISODE_PREFETCH_LEAD_SECONDS
+                    ),
+                nextEpisodeSilentAutoPlay = prefs[nextEpisodeSilentAutoPlayKey] ?: true,
                 nextEpisodeThresholdMinutesBeforeEnd = normalizeHalfStep(
                     value = prefs[nextEpisodeThresholdMinutesBeforeEndKey]
                         ?: prefs[nextEpisodeThresholdMinutesBeforeEndLegacyKey]?.toFloat()
@@ -1243,6 +1261,21 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setNextEpisodePrefetchLeadSeconds(seconds: Int) {
+        store().edit { prefs ->
+            prefs[nextEpisodePrefetchLeadSecondsKey] = seconds.coerceIn(
+                PlayerSettings.MIN_NEXT_EPISODE_PREFETCH_LEAD_SECONDS,
+                PlayerSettings.MAX_NEXT_EPISODE_PREFETCH_LEAD_SECONDS
+            )
+        }
+    }
+
+    suspend fun setNextEpisodeSilentAutoPlay(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[nextEpisodeSilentAutoPlayKey] = enabled
+        }
+    }
+
     suspend fun setNextEpisodeThresholdMode(mode: NextEpisodeThresholdMode) {
         store().edit { prefs ->
             prefs[nextEpisodeThresholdModeKey] = mode.name
@@ -1251,7 +1284,7 @@ class PlayerSettingsDataStore @Inject constructor(
 
     suspend fun setNextEpisodeThresholdPercent(percent: Float) {
         store().edit { prefs ->
-            prefs[nextEpisodeThresholdPercentKey] = normalizeHalfStep(
+            prefs[nextEpisodeThresholdPercentKey] = normalizeTenthStep(
                 value = percent,
                 min = 97f,
                 max = 100f
@@ -1271,6 +1304,13 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private fun normalizeHalfStep(value: Float, min: Float, max: Float): Float {
         return (value.coerceIn(min, max) * 2f).roundToInt() / 2f
+    }
+
+    // Fork: the next-episode percentage is rounded to a tenth rather than a half, so
+    // 99.8% is expressible. On a 45 minute episode the difference between 99.5 and 99.8
+    // is about eight seconds, which is exactly the range that matters here.
+    private fun normalizeTenthStep(value: Float, min: Float, max: Float): Float {
+        return (value.coerceIn(min, max) * 10f).roundToInt() / 10f
     }
 
     suspend fun setStreamReuseLastLinkEnabled(enabled: Boolean) {
