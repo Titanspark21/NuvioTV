@@ -89,6 +89,8 @@ internal fun LazyListScope.autoPlaySettingsItems(
     onSetStreamAutoPlayReuseBingeGroup: (Boolean) -> Unit,
     onSetNextEpisodeThresholdPercent: (Float) -> Unit,
     onSetNextEpisodeThresholdMinutesBeforeEnd: (Float) -> Unit,
+    onSetNextEpisodePrefetchLeadSeconds: (Int) -> Unit,
+    onSetNextEpisodeSilentAutoPlay: (Boolean) -> Unit,
     onSetStreamAutoPlayTimeoutSeconds: (Int) -> Unit,
     onSetReuseLastLinkEnabled: (Boolean) -> Unit,
     onSetStillWatchingEnabled: (Boolean) -> Unit,
@@ -258,16 +260,19 @@ internal fun LazyListScope.autoPlaySettingsItems(
     item(key = "autoplay_threshold_value") {
         when (playerSettings.nextEpisodeThresholdMode) {
             NextEpisodeThresholdMode.PERCENTAGE -> {
+                // Fork: tenths rather than halves, so 99.8% is reachable. On a 45
+                // minute episode a tenth of a percent is roughly three seconds, which
+                // is the resolution that actually matters this close to the end.
                 SliderSettingsItem(
                     icon = Icons.Default.Tune,
                     title = stringResource(R.string.autoplay_threshold_pct_title),
                     subtitle = stringResource(R.string.autoplay_threshold_pct_sub),
-                    value = (playerSettings.nextEpisodeThresholdPercent * 2f).roundToInt(),
-                    valueText = "${formatHalfStepValue(playerSettings.nextEpisodeThresholdPercent)}%",
-                    minValue = 194,
-                    maxValue = 200,
+                    value = (playerSettings.nextEpisodeThresholdPercent * 10f).roundToInt(),
+                    valueText = "${formatTenthStepValue(playerSettings.nextEpisodeThresholdPercent)}%",
+                    minValue = 970,
+                    maxValue = 1000,
                     step = 1,
-                    onValueChange = { onSetNextEpisodeThresholdPercent(it / 2f) },
+                    onValueChange = { onSetNextEpisodeThresholdPercent(it / 10f) },
                     onFocused = onItemFocused
                 )
             }
@@ -286,6 +291,39 @@ internal fun LazyListScope.autoPlaySettingsItems(
                 )
             }
         }
+    }
+
+    // Fork: the two controls behind the "no waiting" behaviour. The lead time decides
+    // how early the next stream is chosen; the toggle decides whether having one ready
+    // means playback just continues, or still stops to announce itself.
+    item(key = "autoplay_prefetch_lead") {
+        SliderSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.autoplay_prefetch_lead_title),
+            subtitle = stringResource(R.string.autoplay_prefetch_lead_sub),
+            value = playerSettings.nextEpisodePrefetchLeadSeconds,
+            valueText = if (playerSettings.nextEpisodePrefetchLeadSeconds == 0) {
+                stringResource(R.string.autoplay_prefetch_lead_off)
+            } else {
+                "${playerSettings.nextEpisodePrefetchLeadSeconds}s"
+            },
+            minValue = PlayerSettings.MIN_NEXT_EPISODE_PREFETCH_LEAD_SECONDS,
+            maxValue = PlayerSettings.MAX_NEXT_EPISODE_PREFETCH_LEAD_SECONDS,
+            step = 5,
+            onValueChange = onSetNextEpisodePrefetchLeadSeconds,
+            onFocused = onItemFocused
+        )
+    }
+
+    item(key = "autoplay_silent") {
+        ToggleSettingsItem(
+            icon = Icons.Default.Tune,
+            title = stringResource(R.string.autoplay_silent_title),
+            subtitle = stringResource(R.string.autoplay_silent_sub),
+            isChecked = playerSettings.nextEpisodeSilentAutoPlay,
+            onCheckedChange = onSetNextEpisodeSilentAutoPlay,
+            onFocused = onItemFocused
+        )
     }
 
     if (playerSettings.streamAutoPlayMode != StreamAutoPlayMode.MANUAL) {
@@ -358,6 +396,11 @@ internal fun LazyListScope.autoPlaySettingsItems(
             )
         }
     }
+}
+
+private fun formatTenthStepValue(value: Float): String {
+    val rounded = (value * 10f).roundToInt() / 10f
+    return if (rounded % 1f == 0f) rounded.toInt().toString() else rounded.toString()
 }
 
 private fun formatHalfStepValue(value: Float): String {
