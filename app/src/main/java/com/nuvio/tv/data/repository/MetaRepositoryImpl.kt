@@ -31,8 +31,36 @@ import javax.inject.Singleton
 class MetaRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: AddonApi,
-    private val addonRepository: AddonRepository
+    private val addonRepository: AddonRepository,
+    private val addonSpeedLog: com.nuvio.tv.addonspeed.AddonSpeedLog
 ) : MetaRepository {
+    /**
+     * Fork: times a metadata request. The addon is named where the caller knows it, and
+     * resolved from its base URL where it does not - a log row saying "some addon" would
+     * be useless for the thing this exists to answer.
+     */
+    private suspend fun recordMetaTiming(
+        addonName: String?,
+        addonBaseUrl: String?,
+        startedAtMs: Long,
+        success: Boolean
+    ) {
+        val name = addonName?.takeIf { it.isNotBlank() }
+            ?: addonBaseUrl?.let { url ->
+                runCatching {
+                    addonRepository.getInstalledAddons().first()
+                        .firstOrNull { it.baseUrl == url }?.displayName
+                }.getOrNull()
+            }
+            ?: return
+        addonSpeedLog.record(
+            addonName = name,
+            kind = com.nuvio.tv.addonspeed.AddonCallKind.META,
+            durationMs = System.currentTimeMillis() - startedAtMs,
+            success = success
+        )
+    }
+
     companion object {
         private const val TAG = "MetaRepository"
         /** Default TTL when addon response has no Cache-Control header (6 hours). */
@@ -119,7 +147,9 @@ class MetaRepositoryImpl @Inject constructor(
         val deferred = inFlightMeta.getOrPut(cacheKey) {
             repositoryScope.async {
                 try {
+                    val metaStartedAt = System.currentTimeMillis()
                     val response = api.getMeta(url)
+                    recordMetaTiming(null, addonBaseUrl, metaStartedAt, response.isSuccessful)
                     if (response.isSuccessful) {
                         val metaDto = response.body()?.meta ?: return@async null
                         val meta = metaDto.toDomain(context.getString(R.string.episodes_episode))
@@ -241,7 +271,9 @@ class MetaRepositoryImpl @Inject constructor(
                 attemptedAddonNames += addon.displayName
                 val url = buildMetaUrl(addon.baseUrl, requestedType, id)
                 try {
+                    val metaStartedAt = System.currentTimeMillis()
                     val response = api.getMeta(url)
+                    recordMetaTiming(addon.displayName, null, metaStartedAt, response.isSuccessful)
                     if (response.isSuccessful) {
                         val metaDto = response.body()?.meta
                         if (metaDto != null) {
@@ -313,7 +345,9 @@ class MetaRepositoryImpl @Inject constructor(
                         val url = buildMetaUrl(addon.baseUrl, candidateType, id)
                         Log.d(TAG, "Trying meta addonId=${addon.id} addonName=${addon.name} type=$candidateType id=$id url=$url")
                         try {
+                            val metaStartedAt = System.currentTimeMillis()
                             val response = api.getMeta(url)
+                            recordMetaTiming(addon.displayName, null, metaStartedAt, response.isSuccessful)
                             if (response.isSuccessful) {
                                 val metaDto = response.body()?.meta
                                 if (metaDto != null) {
@@ -402,7 +436,9 @@ class MetaRepositoryImpl @Inject constructor(
         val deferred = inFlightPrimaryMeta.getOrPut(cacheKey) {
             repositoryScope.async {
                 try {
+                    val metaStartedAt = System.currentTimeMillis()
                     val response = api.getMeta(url)
+                    recordMetaTiming(addon.displayName, null, metaStartedAt, response.isSuccessful)
                     if (response.isSuccessful) {
                         val metaDto = response.body()?.meta ?: return@async null
                         val meta = metaDto.toDomain(context.getString(R.string.episodes_episode))
