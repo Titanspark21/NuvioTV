@@ -364,6 +364,13 @@ class PlayerRuntimeController(
     internal var nextEpisodeVideo: Video? = null
     internal var userPausedManually = false
 
+    // Fork: the next episode's stream, chosen ahead of time while the current episode is
+    // still playing. Having it in hand at the threshold is what lets playback cut straight
+    // over instead of stopping to search - the search is the wait, not the switch.
+    internal var prefetchedNextStream: com.nuvio.tv.domain.model.Stream? = null
+    internal var prefetchedNextVideoId: String? = null
+    internal var nextEpisodePrefetchJob: Job? = null
+
     internal var isInBackground: Boolean = false
     internal var pendingBackgroundCrashRecovery: Boolean = false
     internal var backgroundCrashSavedPositionMs: Long = 0L
@@ -408,6 +415,11 @@ class PlayerRuntimeController(
     internal var nextEpisodeThresholdModeSetting: NextEpisodeThresholdMode = NextEpisodeThresholdMode.PERCENTAGE
     internal var nextEpisodeThresholdPercentSetting: Float = 98f
     internal var nextEpisodeThresholdMinutesBeforeEndSetting: Float = 2f
+    // Fork: how far ahead of the threshold to start choosing the next stream, and whether
+    // a stream chosen ahead of time should start playing without showing anything.
+    internal var nextEpisodePrefetchLeadSecondsSetting: Int =
+        PlayerSettings.DEFAULT_NEXT_EPISODE_PREFETCH_LEAD_SECONDS
+    internal var nextEpisodeSilentAutoPlaySetting: Boolean = true
     internal var stillWatchingEnabledSetting: Boolean = false
     internal var stillWatchingEpisodeThresholdSetting: Int =
         PlayerSettings.DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD
