@@ -357,6 +357,25 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
         thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
     )
 
+    // Fork: start choosing the next stream a configurable while before the threshold.
+    // Asking the existing rule "would the card be showing this many seconds from now?"
+    // reuses all of its behaviour, including the outro handling, instead of re-deriving
+    // the threshold position and getting it subtly different.
+    if (!shouldShow && streamAutoPlayNextEpisodeEnabledSetting && nextEpisodePrefetchLeadSecondsSetting > 0) {
+        val leadMs = nextEpisodePrefetchLeadSecondsSetting * 1_000L
+        val dueSoon = PlayerNextEpisodeRules.shouldShowNextEpisodeCard(
+            positionMs = positionMs + leadMs,
+            durationMs = effectiveDuration,
+            skipIntervals = skipIntervals,
+            thresholdMode = nextEpisodeThresholdModeSetting,
+            thresholdPercent = nextEpisodeThresholdPercentSetting,
+            thresholdMinutesBeforeEnd = nextEpisodeThresholdMinutesBeforeEndSetting
+        )
+        if (dueSoon && state.nextEpisode.hasAired) {
+            prefetchNextEpisodeStream()
+        }
+    }
+
     if (!shouldShow) return
 
     if (_uiState.value.postPlayDismissedForCurrentEpisode) return
@@ -372,6 +391,33 @@ internal fun PlayerRuntimeController.evaluatePostPlayOverlayVisibility(positionM
     if (shouldEnterStillWatching) {
         enterStillWatchingPromptMode()
     } else {
+        // Fork: a stream chosen ahead of time means there is nothing to wait for, so cut
+        // straight to it without ever showing the searching card. This is the whole point
+        // of the prefetch - the card was only ever a progress indicator for the search.
+        val banked = prefetchedNextStream
+        val bankedMatchesNext = banked != null && prefetchedNextVideoId == nextEpisodeVideo?.id
+        if (bankedMatchesNext && state.nextEpisode.hasAired &&
+            streamAutoPlayNextEpisodeEnabledSetting && nextEpisodeSilentAutoPlaySetting
+        ) {
+            val target = nextEpisodeVideo
+            clearNextEpisodePrefetch()
+            _uiState.update {
+                it.copy(
+                    postPlayMode = null,
+                    postPlayDismissedForCurrentEpisode = true,
+                    playbackEnded = false,
+                )
+            }
+            if (target != null && banked != null) {
+                switchToEpisodeStream(
+                    stream = banked,
+                    forcedTargetVideo = target,
+                    isAutoPlay = true
+                )
+            }
+            return
+        }
+
         _uiState.update {
             it.copy(postPlayMode = PostPlayMode.AutoPlay(nextEpisode = state.nextEpisode))
         }
