@@ -7,6 +7,7 @@ package com.nuvio.tv.ui.screens.player
 
 import com.nuvio.tv.ui.theme.NuvioMotion
 
+import com.nuvio.tv.ui.util.rememberLongPressKeyTracker
 import com.nuvio.tv.ui.theme.NuvioTheme
 
 import android.util.Log
@@ -1001,6 +1002,7 @@ fun PlayerScreen(
                 },
                 onPlayPause = { viewModel.onEvent(PlayerEvent.OnPlayPause) },
                 onPlayNextEpisode = { viewModel.onEvent(PlayerEvent.OnPlayNextEpisode) },
+                onPickNextEpisodeStream = { viewModel.onEvent(PlayerEvent.OnPickNextEpisodeStream) },
                 onSeekForward = { viewModel.onEvent(PlayerEvent.OnSeekForward) },
                 onSeekBackward = { viewModel.onEvent(PlayerEvent.OnSeekBackward) },
                 onSeekTo = { viewModel.onEvent(PlayerEvent.OnSeekTo(it)) },
@@ -1692,6 +1694,7 @@ private fun PlayerControlsOverlay(
     progressBarUpFocusRequester: FocusRequester? = null,
     onPlayPause: () -> Unit,
     onPlayNextEpisode: () -> Unit,
+    onPickNextEpisodeStream: () -> Unit,
     onSeekForward: () -> Unit,
     onSeekBackward: () -> Unit,
     onSeekTo: (Long) -> Unit,
@@ -1888,6 +1891,7 @@ private fun PlayerControlsOverlay(
                             onClick = onPlayNextEpisode,
                             upFocusRequester = progressBarFocusRequester,
                             onDownKey = onHideControls,
+                            onLongPress = onPickNextEpisodeStream,
                             onFocused = onResetHideTimer
                         )
                     }
@@ -2140,12 +2144,19 @@ private fun ControlButton(
     upFocusRequester: FocusRequester? = null,
     enabled: Boolean = true,
     onDownKey: (() -> Unit)? = null,
+    onLongPress: (() -> Unit)? = null,
     onFocused: (() -> Unit)? = null
 ) {
     var isFocused by remember { mutableStateOf(false) }
+    // Fork: optional long press, used by the next-episode button to open the stream
+    // list instead of auto-playing.
+    var longPressTriggered by remember { mutableStateOf(false) }
+    val longPressKeyTracker = rememberLongPressKeyTracker()
 
     IconButton(
-        onClick = onClick,
+        onClick = {
+            if (longPressTriggered) longPressTriggered = false else onClick()
+        },
         enabled = enabled,
         modifier = Modifier
             .size(NuvioTheme.spacing.xxxl)
@@ -2161,6 +2172,23 @@ private fun ControlButton(
                 }
             )
             .onPreviewKeyEvent { keyEvent ->
+                val native = keyEvent.nativeKeyEvent
+                if (onLongPress != null &&
+                    longPressKeyTracker.handle(
+                        native,
+                        { code ->
+                            code == KeyEvent.KEYCODE_DPAD_CENTER ||
+                                code == KeyEvent.KEYCODE_ENTER ||
+                                code == KeyEvent.KEYCODE_NUMPAD_ENTER
+                        }
+                    ) {
+                        longPressTriggered = true
+                        onLongPress()
+                    }
+                ) {
+                    if (native.action == KeyEvent.ACTION_UP) longPressTriggered = false
+                    return@onPreviewKeyEvent true
+                }
                 if (
                     upFocusRequester != null &&
                     keyEvent.nativeKeyEvent.action == KeyEvent.ACTION_DOWN &&

@@ -315,6 +315,8 @@ sealed class PlayerEvent {
     data object OnSkipIntro : PlayerEvent()
     data object OnDismissSkipIntro : PlayerEvent()
     data object OnPlayNextEpisode : PlayerEvent()
+    /** Fork: long press on the next-episode button - choose the stream by hand. */
+    data object OnPickNextEpisodeStream : PlayerEvent()
     data object OnDismissNextEpisodeCard : PlayerEvent()
     data object OnStillWatchingContinue : PlayerEvent()
     data object OnDismissStillWatchingPrompt : PlayerEvent()
