@@ -29,7 +29,8 @@ concurrency:
 
 jobs:
   sync-and-release:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ajay-trusted]
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
       UPSTREAM: https://github.com/NuvioMedia/NuvioTV.git
