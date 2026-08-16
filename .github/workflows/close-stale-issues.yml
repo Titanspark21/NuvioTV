@@ -16,7 +16,8 @@ permissions:
 
 jobs:
   close_stale:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ajay-trusted]
+    timeout-minutes: 30
     steps:
       - name: Close bug issues inactive longer than 30 days
         uses: actions/github-script@v7
