@@ -88,8 +88,21 @@ class AddonSpeedViewModel @Inject constructor(
                 }
             }
 
+            // Each scraper on its own first - that is the number that identifies the slow
+            // one - then all of them together, which is what pressing play actually costs.
+            val streamAddons = speedTest.streamAddons()
             for (item in items) {
-                _state.value = _state.value.copy(testProgress = "Streams - ${item.label}")
+                for (addon in streamAddons) {
+                    _state.value = _state.value.copy(
+                        testProgress = "${addon.displayName} - ${item.label}"
+                    )
+                    rows += speedTest.timeStreamAddon(addon, item)
+                    _state.value = _state.value.copy(testRows = rows.toList())
+                }
+            }
+
+            for (item in items) {
+                _state.value = _state.value.copy(testProgress = "All scrapers together - ${item.label}")
                 rows += speedTest.timeStreams(item)
                 _state.value = _state.value.copy(testRows = rows.toList())
             }
