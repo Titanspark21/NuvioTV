@@ -223,6 +223,16 @@ jobs:
         if: steps.decide.outputs.proceed == 'true'
         run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
+      # The release build has run out of memory here before, and the heap numbers in
+      # gradle.properties were chosen without knowing what this machine actually has.
+      # Two lines of output means the next failure can be diagnosed from the log alone.
+      - name: Report what this machine has to work with
+        if: steps.decide.outputs.proceed == 'true'
+        run: |
+          echo "cores: $(nproc)"
+          free -h || true
+          df -h . | tail -1
+
       - name: Build release APKs
         if: steps.decide.outputs.proceed == 'true'
         run: heavy-build-slot ./gradlew :app:assembleFullRelease -PFORK_BUILD=${{ steps.version.outputs.fork_build }} --stacktrace
