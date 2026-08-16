@@ -322,6 +322,15 @@ android {
         buildConfig = true
     }
 
+    // Fork: lintVitalAnalyze ran out of memory during the release build and took the
+    // whole run down with it. It is a code-quality gate, and blocking a personal fork's
+    // release on it buys nothing - lint still runs on demand via the lint tasks.
+    // Dropping it from the release path also removes an entire worker process from the
+    // build's peak memory, which is the real constraint on this runner.
+    lint {
+        checkReleaseBuilds = false
+    }
+
     sourceSets {
         getByName("main") {
             jniLibs.srcDirs("src/main/jniLibs")
