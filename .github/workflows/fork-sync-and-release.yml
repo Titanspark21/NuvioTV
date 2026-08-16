@@ -164,6 +164,14 @@ jobs:
         if: steps.decide.outputs.proceed == 'true'
         run: yes | "${ANDROID_HOME}/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null 2>&1 || true
 
+      # Upstream has said it wants the built-in debrid integration gone. This fork keeps
+      # it, and the sync above rebases blindly, so check the feature survived before
+      # spending an hour building a release that quietly lost it. See
+      # preservation/TORBOX-INSTANT.md.
+      - name: Check Torbox Instant survived the rebase
+        if: steps.decide.outputs.proceed == 'true'
+        run: ./gradlew :app:testFullDebugUnitTest --tests "*TorboxInstantPreservationTest*" --stacktrace
+
       - name: Build release APKs
         if: steps.decide.outputs.proceed == 'true'
         run: ./gradlew :app:assembleFullRelease -PFORK_BUILD=${{ steps.version.outputs.fork_build }} --stacktrace
