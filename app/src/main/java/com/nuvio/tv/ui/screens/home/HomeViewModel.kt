@@ -90,7 +90,12 @@ class HomeViewModel @Inject constructor(
         private const val MAX_RECENT_PROGRESS_ITEMS = 300
         private const val MAX_NEXT_UP_LOOKUPS = 24
         private const val MAX_NEXT_UP_CONCURRENCY = 4
-        private const val MAX_CATALOG_LOAD_CONCURRENCY = 3
+        // Fork: 3 -> 6. With a lot of catalogue rows, nearly all served by one addon, three
+        // at a time spreads the home screen filling in over several seconds. Six is a
+        // deliberate half-step rather than the 8 the ysosrs fork uses: every increment is
+        // also more simultaneous requests at one addon, and an addon that rate-limits shows
+        // up as rows that fail rather than rows that are slow.
+        private const val MAX_CATALOG_LOAD_CONCURRENCY = 6
         internal const val EXTERNAL_META_PREFETCH_FOCUS_DEBOUNCE_MS = 220L
         internal const val EXTERNAL_META_PREFETCH_ADJACENT_DEBOUNCE_MS = 120L
         private const val MAX_ENRICHMENT_CACHE_SIZE = 64
