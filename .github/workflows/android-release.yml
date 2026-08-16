@@ -27,7 +27,8 @@ concurrency:
 jobs:
   release:
     name: ${{ inputs.mode }} Android TV release
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ajay-trusted]
+    timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
       LOCAL_PROPERTIES_BASE64: ${{ secrets.LOCAL_PROPERTIES_BASE64 }}
