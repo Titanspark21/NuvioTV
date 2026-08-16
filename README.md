@@ -12,6 +12,10 @@
 
 </div>
 
+> **This is a personal fork of [NuvioMedia/NuvioTV](https://github.com/NuvioMedia/NuvioTV).**
+> It tracks upstream automatically and adds a handful of features of its own — see
+> [FORK.md](FORK.md) for everything that differs. Please support the upstream project.
+
 ## Get Nuvio TV
 
 - [Android TV on Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app)
