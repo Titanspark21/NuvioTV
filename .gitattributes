@@ -1,0 +1,5 @@
+# Shell scripts must stay LF. This is a Windows working copy, so without this git
+# hands them back with CRLF endings; the release workflow runs
+# scripts/check-torbox-instant.sh on an Ubuntu runner, where a stray carriage
+# return makes bash fail on lines that look perfectly fine in an editor.
+*.sh text eol=lf
