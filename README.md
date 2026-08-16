@@ -18,6 +18,10 @@
 
 </div>
 
+> **This is a personal fork of [NuvioMedia/NuvioTV](https://github.com/NuvioMedia/NuvioTV).**
+> It tracks upstream automatically and adds a handful of features of its own — see
+> [FORK.md](FORK.md) for everything that differs. Please support the upstream project.
+
 ## About
 
 NuvioTV is a modern media player designed specifically for Android TV.
