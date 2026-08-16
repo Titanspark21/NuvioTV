@@ -28,7 +28,7 @@ jobs:
   release:
     name: ${{ inputs.mode }} Android TV release
     runs-on: [self-hosted, Linux, X64, ajay-trusted]
-    timeout-minutes: 30
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ github.token }}
       LOCAL_PROPERTIES_BASE64: ${{ secrets.LOCAL_PROPERTIES_BASE64 }}
@@ -204,7 +204,7 @@ jobs:
 
       - name: Build full release APKs
         if: inputs.mode != 'dry-run'
-        run: ./gradlew :app:assembleFullRelease --stacktrace
+        run: heavy-build-slot ./gradlew :app:assembleFullRelease --stacktrace
 
       - name: Upload build artifacts
         if: inputs.mode != 'dry-run'
