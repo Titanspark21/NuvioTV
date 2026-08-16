@@ -6,7 +6,9 @@ plugins {
     alias(libs.plugins.hilt)
     alias(libs.plugins.ksp)
     alias(libs.plugins.kotlin.serialization)
-    alias(libs.plugins.sentry.android.gradle)
+    // Fork: the Sentry Gradle plugin is not applied. It rewrites every class in the app
+    // at build time (transformClassesWithAsm) and uploads ProGuard mappings, both of
+    // which are pure cost once the DSN is empty. See sentryDsn below.
 }
 
 import java.io.File
@@ -61,8 +63,11 @@ val doviStaticLibPath = resolveProperty(devProperties, localProperties, "DOVI_LI
 val doviIncludeDirPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_INCLUDE_DIR")
 val doviPrebuiltRootPath = resolveProperty(devProperties, localProperties, "DOVI_LIBDOVI_PREBUILT_ROOT")
 val sponsorNames = resolveProperty(devProperties, localProperties, "SPONSOR_NAMES", "ragmehos.")
-val sentryDsn = providers.environmentVariable("SENTRY_DSN").orNull?.trim()?.takeIf { it.isNotBlank() }
-    ?: resolveProperty(devProperties, localProperties, "SENTRY_DSN")
+// Fork: always empty, deliberately. Upstream's DSN points at upstream's Sentry project,
+// so a configured fork build would ship this fork's crashes and breadcrumbs to someone
+// else's dashboard. SentryInitializer returns early on a blank DSN, so this is what
+// actually switches crash reporting off - the SDK never initialises.
+val sentryDsn = ""
 val sentryAuthToken = providers.environmentVariable("SENTRY_AUTH_TOKEN").orNull?.trim()?.takeIf { it.isNotBlank() }
     ?: resolveProperty(devProperties, localProperties, "SENTRY_AUTH_TOKEN").takeIf { it.isNotBlank() }
 val sentryOrg = providers.environmentVariable("SENTRY_ORG").orNull?.trim()?.takeIf { it.isNotBlank() }
@@ -380,27 +385,8 @@ baselineProfile {
     }
 }
 
-sentry {
-    includeProguardMapping.set(true)
-    autoUploadProguardMapping.set(sentryMappingUploadEnabled)
-    uploadNativeSymbols.set(false)
-    autoUploadNativeSymbols.set(false)
-    includeNativeSources.set(false)
-    includeSourceContext.set(false)
-    autoUploadSourceContext.set(false)
-    includeDependenciesReport.set(false)
-    telemetry.set(false)
-    sentryAuthToken?.let(authToken::set)
-    sentryOrg?.let(org::set)
-    sentryProject?.let(projectName::set)
-    ignoredBuildTypes.set(setOf("debug"))
-    autoInstallation {
-        enabled.set(false)
-    }
-    tracingInstrumentation {
-        enabled.set(false)
-    }
-}
+// Fork: the sentry { } configuration block is gone with the plugin that provided it.
+// Nothing configures crash reporting any more; the empty DSN above is the switch.
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
