@@ -108,18 +108,32 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
         val mediaItem = mediaItemBuilder.build()
 
-        // 1. Parallel connections (opt-in). ParallelRangeDataSource needs a concrete
-        // OkHttpDataSource.Factory, so build one only on this path.
-        parallelStartupPrefetchUnlocked.set(!(useParallelConnections && !isHls && !isDash))
-        val progressiveUpstreamFactory: DataSource.Factory = if (useParallelConnections && !isHls && !isDash) {
+        // 1. Parallel connections (opt-in), plus the MP4 session path (always on).
+        //
+        // A non-faststart or badly-interleaved MP4 keeps its index at the end of the file
+        // and scatters its samples, so every seek sends the extractor back and forth across
+        // the file. Through a plain HTTP source that means tearing down and reopening the
+        // connection each time, which is what makes those files stall on every skip. Routing
+        // MP4 through the chunk session instead keeps the already-downloaded pieces around,
+        // so the backward reads are served from what is already here.
+        //
+        // Deliberately single-connection with its own chunk size: this is about retaining
+        // chunks across seeks, not about downloading faster, and one connection keeps the
+        // request count and the memory footprint close to what a plain source would use.
+        val mp4SessionMode = !useParallelConnections && !isHls && !isDash &&
+            resolvedMimeType == MimeTypes.VIDEO_MP4
+        val useChunkSessionSource = (useParallelConnections || mp4SessionMode) && !isHls && !isDash
+
+        parallelStartupPrefetchUnlocked.set(!useChunkSessionSource)
+        val progressiveUpstreamFactory: DataSource.Factory = if (useChunkSessionSource) {
             val okHttpFactory = OkHttpDataSource.Factory(playbackHttpClient).apply {
                 setDefaultRequestProperties(sanitizedHeaders)
                 setUserAgent(DEFAULT_USER_AGENT)
             }
             ParallelRangeDataSource.Factory(
                 okHttpFactory,
-                parallelConnectionCount,
-                parallelChunkSizeKb.toLong() * 1024L,
+                if (mp4SessionMode) 1 else parallelConnectionCount,
+                if (mp4SessionMode) MP4_SESSION_CHUNK_BYTES else parallelChunkSizeKb.toLong() * 1024L,
                 useNativeMemory = nuvioPerformanceModeEnabled,
                 shouldAllowBackgroundPrefetch = { true },
                 onResolvedUri = { resolved -> currentVodCacheResolvedUrl = resolved?.toString() }
@@ -232,6 +246,11 @@ internal class PlayerMediaSourceFactory(private val context: Context) {
 
     companion object {
         private const val MIME_VIDEO_QUICK_TIME = "video/quicktime"
+        // Smaller than the parallel path's default chunk: the MP4 session is about
+        // retaining pieces across seeks on one connection, so a large chunk would only
+        // mean waiting longer for the first one to become useful.
+        private const val MP4_SESSION_CHUNK_BYTES = 8L * 1024L * 1024L
+
         private const val ENABLE_VOD_CACHE = true
         private const val VOD_CACHE_FREE_SPACE_RESERVE_BYTES = 1024L * 1024L * 1024L
         internal const val DEFAULT_USER_AGENT =
