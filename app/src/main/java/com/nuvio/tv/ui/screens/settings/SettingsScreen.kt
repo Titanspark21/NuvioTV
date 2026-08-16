@@ -757,6 +757,7 @@ private fun SettingsDetailPane(
         )
         SettingsCategory.PLAYBACK -> if (isEssentialMode) {
             EssentialPlaybackSettingsContent(
+                onNavigateToAddonSpeed = onNavigateToAddonSpeed,
                 initialFocusRequester = if (allowDetailAutofocus) {
                     contentFocusRequesters[SettingsCategory.PLAYBACK]
                 } else {
