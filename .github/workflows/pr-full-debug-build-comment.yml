@@ -14,7 +14,8 @@ permissions:
 jobs:
   comment:
     name: Comment PR with debug build result
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ajay-trusted]
+    timeout-minutes: 30
 
     steps:
       - name: Comment PR
