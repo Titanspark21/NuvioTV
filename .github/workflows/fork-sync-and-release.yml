@@ -30,7 +30,7 @@ concurrency:
 jobs:
   sync-and-release:
     runs-on: [self-hosted, Linux, X64, ajay-trusted]
-    timeout-minutes: 30
+    timeout-minutes: 90
     env:
       GH_TOKEN: ${{ github.token }}
       UPSTREAM: https://github.com/NuvioMedia/NuvioTV.git
@@ -225,7 +225,7 @@ jobs:
 
       - name: Build release APKs
         if: steps.decide.outputs.proceed == 'true'
-        run: ./gradlew :app:assembleFullRelease -PFORK_BUILD=${{ steps.version.outputs.fork_build }} --stacktrace
+        run: heavy-build-slot ./gradlew :app:assembleFullRelease -PFORK_BUILD=${{ steps.version.outputs.fork_build }} --stacktrace
 
       # Keep the APKs even if publishing fails. This build is the better part of an
       # hour, and losing it to a bad token or a rate limit at the last step is a waste
