@@ -16,7 +16,8 @@ permissions:
 
 jobs:
   close_unlabeled:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, Linux, X64, ajay-trusted]
+    timeout-minutes: 30
     steps:
       - name: Close open issues with no labels
         uses: actions/github-script@v7
