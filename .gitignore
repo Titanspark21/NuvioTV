@@ -48,6 +48,8 @@ scripts/*
 !scripts/release_notes/*.py
 !scripts/release-metadata.sh
 !scripts/release_beta.py
+# Fork: the release workflow runs this, so it has to be in the repository.
+!scripts/check-torbox-instant.sh
 !scripts/tests/
 !scripts/tests/*.py
 /supabase
