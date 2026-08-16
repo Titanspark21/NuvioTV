@@ -35,6 +35,41 @@ Two things in one screen:
 **Next episode chosen early** — the stream for the next episode is found before the current one
 ends, so it starts without a pause.
 
+## Performance
+
+Ported from [ysosrs123/NuvioTV-Fork](https://github.com/ysosrs123/NuvioTV-Fork), a sibling fork
+of the same upstream tuned for 100GB 4K remuxes. Its buffering work turned out to be bug-fixing
+rather than bigger numbers — its buffer defaults are identical to upstream's — so it applies to
+ordinary 1080p streams too.
+
+**Playback**
+
+- Reads are served from the in-flight chunk as bytes land, instead of blocking until a whole
+  8–16MB chunk arrives. The wait is chunk size divided by link speed, so this helps a slow
+  connection more, not less.
+- Chunks inside the live prefetch window are no longer evicted and then re-downloaded.
+- A debrid 429 mid-film backs off and recovers after a cooldown, instead of staying throttled
+  for the rest of the film.
+- **MP4 seeks stop thrashing.** Non-faststart and badly-interleaved MP4s keep their index at the
+  end of the file, so every seek sent a plain HTTP source back and forth reopening the
+  connection. MP4 now goes through the chunk session — single connection, 8MB chunks — so
+  backward reads come from what is already downloaded.
+
+**Browsing**
+
+- Coil's crossfade is off on card posters and logos; it was replaying on every recycle during
+  scroll, so loaded posters visibly dimmed and faded back in. The hero backdrop keeps it.
+- Original-size TMDB images are rewritten to a size bucket matching the display target.
+  Multi-megabyte originals took 600–1200ms to decode, which is what left cards blank.
+- Image responses with no usable `Cache-Control` get a one-week max-age, so they stop
+  re-downloading on every scroll return. This is on Coil's own HTTP client, not the API client.
+- Catalogue load concurrency 3 → 6.
+
+**Deliberately not taken:** the TRaSH-guides quality filters and defaults (they drop any stream
+whose resolution will not parse and exclude ~150 release groups — good for a remux library,
+destructive for ordinary and anime content), and the back-buffer 15s→5s change (a fix for
+90+ Mbps remuxes, a small loss at ordinary bitrates).
+
 ## Behaviour changed
 
 **Dolby Vision Profile 7** conversion is enabled in release builds.

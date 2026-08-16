@@ -53,6 +53,14 @@ days; recording is fire-and-forget so it can never slow down the request it meas
 Dolby Vision Profile 7 conversion is on in release builds. Crash reporting is off — the DSN is
 forced empty and the Sentry Gradle plugin is not applied.
 
+Playback and browsing carry performance work ported from a sibling fork: progressive reads from
+the in-flight chunk, no re-downloading of evicted prefetch chunks, debrid rate-limit recovery,
+and MP4 routed through the chunk session so non-faststart files stop thrashing on seek. On the
+browsing side, no crossfade replay on recycled cards, TMDB images downscaled to the display
+target, a one-week fallback cache for images without cache headers, and catalogue concurrency
+raised to 6. Buffer sizes are untouched and remain upstream's. See [FORK.md](FORK.md) for what
+was deliberately left behind and why.
+
 ## What is deliberately preserved
 
 Upstream is removing the built-in debrid integration. This fork keeps **Torbox Instant** and
