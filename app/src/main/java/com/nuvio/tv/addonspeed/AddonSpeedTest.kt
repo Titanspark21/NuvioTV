@@ -80,7 +80,11 @@ class AddonSpeedTest @Inject constructor(
             metaRepository.getMeta(
                 addonBaseUrl = addon.baseUrl,
                 type = item.type,
-                id = item.id
+                // Metadata is per TITLE, so the series id without the season:episode
+                // suffix. Asking for "tt2467372:3:5" made every series row report
+                // "failed" while the film worked, which read as a broken addon rather
+                // than a badly formed request.
+                id = item.id.substringBefore(":")
             ).first { it !is NetworkResult.Loading }
         }
         val elapsed = System.currentTimeMillis() - startedAt
@@ -94,11 +98,39 @@ class AddonSpeedTest @Inject constructor(
     }
 
     /**
+     * Times one stream addon on one title, asked directly by its own base URL.
+     *
+     * This is the number that answers "which of my scrapers is the slow one", which the
+     * all-at-once figure below cannot: run together, every addon appears to take as long
+     * as the slowest, because that is when the combined call returns.
+     */
+    suspend fun timeStreamAddon(addon: Addon, item: SpeedTestItem): SpeedTestRow {
+        val season = item.id.split(":").getOrNull(1)?.toIntOrNull()
+        val episode = item.id.split(":").getOrNull(2)?.toIntOrNull()
+        val baseId = item.id.substringBefore(":")
+        val videoId = if (season != null && episode != null) item.id else baseId
+
+        val startedAt = System.currentTimeMillis()
+        val result = withTimeoutOrNull(TIMEOUT_MS) {
+            streamRepository.getStreamsFromAddon(addon.baseUrl, item.type, videoId)
+        }
+        val elapsed = System.currentTimeMillis() - startedAt
+
+        val outcome = when {
+            result == null -> SpeedTestRow.Outcome.TIMED_OUT
+            result is NetworkResult.Success && result.data.isNotEmpty() -> SpeedTestRow.Outcome.ANSWERED
+            result is NetworkResult.Success -> SpeedTestRow.Outcome.EMPTY
+            else -> SpeedTestRow.Outcome.FAILED
+        }
+        return SpeedTestRow(addon.displayName, item, AddonCallKind.STREAM, elapsed, outcome)
+    }
+
+    /**
      * Times the stream search for one title across all stream addons at once.
      *
-     * Unlike metadata, this deliberately measures the real thing: the app always asks
-     * every stream addon together, so timing them in isolation would report a number the
-     * owner never actually experiences.
+     * Kept alongside the per-addon timing above because it measures a different thing:
+     * what the wait actually feels like when you press play, which is the slowest addon
+     * plus whatever contention they cause each other.
      */
     suspend fun timeStreams(item: SpeedTestItem): SpeedTestRow {
         val season = item.id.split(":").getOrNull(1)?.toIntOrNull()

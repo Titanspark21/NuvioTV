@@ -33,6 +33,10 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun EssentialPlaybackSettingsContent(
+    // Required, not defaulted to {}: a defaulted navigation lambda is exactly how the
+    // Advanced-mode row shipped dead once already. Requiring it makes the same omission a
+    // build failure instead of a row that draws, focuses and does nothing.
+    onNavigateToAddonSpeed: () -> Unit,
     initialFocusRequester: FocusRequester? = null,
     viewModel: PlaybackSettingsViewModel = hiltViewModel()
 ) {
@@ -159,6 +163,25 @@ fun EssentialPlaybackSettingsContent(
                         trailingIcon = Icons.Default.Tune,
                         onClick = { showDecoderPriorityDialog = true },
                         enabled = settings != null
+                    )
+                }
+            }
+
+            // Fork: Essential mode used to omit this entirely, so the only way to reach the
+            // addon timings was to switch the whole app to Advanced. It is a diagnostic, not
+            // a tuning knob - "which of my addons is slow" is a question an Essential user
+            // has just as often, and answering it changes nothing about playback.
+            item(key = "addon_speed") {
+                SettingsGroupCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    title = stringResource(R.string.addon_speed_title)
+                ) {
+                    SettingsActionRow(
+                        title = stringResource(R.string.addon_speed_title),
+                        subtitle = stringResource(R.string.addon_speed_sub),
+                        value = "",
+                        trailingIcon = Icons.Default.Tune,
+                        onClick = onNavigateToAddonSpeed
                     )
                 }
             }
