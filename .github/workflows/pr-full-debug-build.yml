@@ -13,6 +13,18 @@ concurrency:
   group: pr-full-debug-build-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
+# No `cache: gradle` on setup-java here, deliberately.
+#
+# Same reason as the npm caches removed from the other repos on 2026-08-16, and
+# worse: this runner keeps ~/.gradle between runs, so the setting does not save
+# a download, it tars up the machine's whole Gradle home -- caches, wrapper
+# distributions, build cache -- and pushes it through GitHub's cache service
+# over a home connection. The npm equivalent measured 1,061,251,973 bytes at
+# 2.2 MB/s, 8 to 20 minutes per job; a Gradle home is normally larger again.
+#
+# On a GitHub-hosted runner the machine is discarded after every run and this
+# setting is worth having. This is not one of those.
+
 jobs:
   full-debug-build:
     name: Build fullDebug APK
@@ -28,7 +40,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "17"
-          cache: gradle
 
       - name: Prepare local properties
         env:
