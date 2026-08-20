@@ -26,6 +26,9 @@ import kotlinx.coroutines.launch
 
 internal const val AUDIO_AMPLIFICATION_MIN_DB = 0
 internal const val AUDIO_AMPLIFICATION_MAX_DB = 10
+internal const val DIALOGUE_LEVELER_OFF = 0
+internal const val DIALOGUE_LEVELER_MIN = 0
+internal const val DIALOGUE_LEVELER_MAX = 4
 internal const val CENTER_MIX_LEVEL_MIN_DB = -10
 internal const val CENTER_MIX_LEVEL_MAX_DB = 30
 internal const val AUDIO_DELAY_MIN_MS = -3000
@@ -90,6 +93,33 @@ internal fun PlayerRuntimeController.applyAudioAmplification(db: Int) {
     }
 }
 
+internal fun PlayerRuntimeController.applyDialogueLeveler(level: Int) {
+    val clampedLevel = level.coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
+    // The compressor lives only in the ExoPlayer PCM chain, so it is available when an ExoPlayer
+    // is running (the MPV engine handles its own audio and is left untouched here).
+    val isAvailable = _exoPlayer != null
+    val wasActive = compressorAudioProcessor.isLevelerEnabled()
+    compressorAudioProcessor.setLevel(if (isAvailable) clampedLevel else DIALOGUE_LEVELER_OFF)
+    val isActiveNow = compressorAudioProcessor.isLevelerEnabled()
+
+    // Toggling the processor between active and inactive changes the sink's processing
+    // requirement; nudge it (and re-derive track selection) exactly as amplification does so the
+    // new chain takes effect without recreating the player.
+    if (wasActive != isActiveNow && !isUsingMpvEngine()) {
+        playbackSpeedAwareAudioSink?.notifyAudioProcessingRequirementChanged()
+        _exoPlayer?.let { player ->
+            player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().build()
+        }
+    }
+
+    _uiState.update {
+        it.copy(
+            dialogueLevelerLevel = clampedLevel,
+            isDialogueLevelerAvailable = isAvailable
+        )
+    }
+}
+
 internal fun PlayerRuntimeController.applyCenterMixLevel(db: Int) {
     val clampedDb = db.coerceIn(CENTER_MIX_LEVEL_MIN_DB, CENTER_MIX_LEVEL_MAX_DB)
     ffmpegAudioRenderer?.setCenterMixLevelDb(clampedDb)
@@ -111,10 +141,17 @@ internal fun PlayerRuntimeController.updateAudioControlAvailability(
     gainAudioProcessor.setGainDb(
         if (isAudioAmplificationAvailable) clampedDb else AUDIO_AMPLIFICATION_MIN_DB
     )
+    val isDialogueLevelerAvailable = _exoPlayer != null
+    val clampedLevel = _uiState.value.dialogueLevelerLevel
+        .coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
+    compressorAudioProcessor.setLevel(
+        if (isDialogueLevelerAvailable) clampedLevel else DIALOGUE_LEVELER_OFF
+    )
     _uiState.update { state ->
         state.copy(
             isAudioAmplificationAvailable = isAudioAmplificationAvailable,
-            isCenterMixAvailable = isCenterMixAvailable
+            isCenterMixAvailable = isCenterMixAvailable,
+            isDialogueLevelerAvailable = isDialogueLevelerAvailable
         )
     }
 }
@@ -1268,6 +1305,14 @@ fun PlayerRuntimeController.onEvent(event: PlayerEvent) {
                 scope.launch {
                     playerSettingsDataStore.setCenterMixLevelDb(clampedDb)
                 }
+            }
+        }
+        is PlayerEvent.OnSetDialogueLevelerLevel -> {
+            val clampedLevel = event.level.coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
+            applyDialogueLeveler(clampedLevel)
+            // The dialogue leveler is a set-and-forget preference: always remembered across sessions.
+            scope.launch {
+                playerSettingsDataStore.setDialogueLevelerLevel(clampedLevel)
             }
         }
         is PlayerEvent.OnSelectSubtitleTrack -> {
