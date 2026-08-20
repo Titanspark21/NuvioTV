@@ -62,11 +62,14 @@ internal fun AudioSelectionOverlay(
     isAmplificationAvailable: Boolean,
     centerMixLevelDb: Int,
     isCenterMixAvailable: Boolean,
+    dialogueLevelerLevel: Int,
+    isDialogueLevelerAvailable: Boolean,
     persistAmplification: Boolean,
     onTrackSelected: (Int) -> Unit,
     onAudioDelayChange: (Int) -> Unit,
     onAmplificationChange: (Int) -> Unit,
     onCenterMixLevelChange: (Int) -> Unit,
+    onDialogueLevelerChange: (Int) -> Unit,
     onPersistAmplificationChange: (Boolean) -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
@@ -76,6 +79,8 @@ internal fun AudioSelectionOverlay(
     val delayPlusFocusRequester = remember { FocusRequester() }
     val ampMinusFocusRequester = remember { FocusRequester() }
     val ampPlusFocusRequester = remember { FocusRequester() }
+    val levelerMinusFocusRequester = remember { FocusRequester() }
+    val levelerPlusFocusRequester = remember { FocusRequester() }
     val centerMinusFocusRequester = remember { FocusRequester() }
     val centerPlusFocusRequester = remember { FocusRequester() }
     val persistFocusRequester = remember { FocusRequester() }
@@ -89,6 +94,9 @@ internal fun AudioSelectionOverlay(
     val currentCenterMixDb = centerMixLevelDb.coerceIn(CENTER_MIX_LEVEL_MIN_DB, CENTER_MIX_LEVEL_MAX_DB)
     val canDecreaseCenterMix = isCenterMixAvailable && currentCenterMixDb > CENTER_MIX_LEVEL_MIN_DB
     val canIncreaseCenterMix = isCenterMixAvailable && currentCenterMixDb < CENTER_MIX_LEVEL_MAX_DB
+    val currentLevelerLevel = dialogueLevelerLevel.coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
+    val canDecreaseLeveler = isDialogueLevelerAvailable && currentLevelerLevel > DIALOGUE_LEVELER_MIN
+    val canIncreaseLeveler = isDialogueLevelerAvailable && currentLevelerLevel < DIALOGUE_LEVELER_MAX
 
     var lastFocusedAudioIndex by rememberSaveable { mutableStateOf<Int?>(null) }
     var pendingControlFocusTarget by rememberSaveable {
@@ -110,6 +118,8 @@ internal fun AudioSelectionOverlay(
                 canIncreaseDelay -> delayPlusFocusRequester
                 canDecreaseAmp -> ampMinusFocusRequester
                 canIncreaseAmp -> ampPlusFocusRequester
+                canDecreaseLeveler -> levelerMinusFocusRequester
+                canIncreaseLeveler -> levelerPlusFocusRequester
                 canDecreaseCenterMix -> centerMinusFocusRequester
                 canIncreaseCenterMix -> centerPlusFocusRequester
                 else -> persistFocusRequester
@@ -118,7 +128,14 @@ internal fun AudioSelectionOverlay(
         }
     }
 
-    LaunchedEffect(visible, pendingControlFocusTarget, audioAmplificationDb, isAmplificationAvailable) {
+    LaunchedEffect(
+        visible,
+        pendingControlFocusTarget,
+        audioAmplificationDb,
+        isAmplificationAvailable,
+        dialogueLevelerLevel,
+        isDialogueLevelerAvailable
+    ) {
         if (!visible) return@LaunchedEffect
         val target = pendingControlFocusTarget ?: return@LaunchedEffect
         val targetCanFocus = when (target) {
@@ -126,6 +143,8 @@ internal fun AudioSelectionOverlay(
             AudioControlFocusTarget.DelayPlus -> canIncreaseDelay
             AudioControlFocusTarget.AmpMinus -> canDecreaseAmp
             AudioControlFocusTarget.AmpPlus -> canIncreaseAmp
+            AudioControlFocusTarget.LevelerMinus -> canDecreaseLeveler
+            AudioControlFocusTarget.LevelerPlus -> canIncreaseLeveler
             AudioControlFocusTarget.CenterMinus -> canDecreaseCenterMix
             AudioControlFocusTarget.CenterPlus -> canIncreaseCenterMix
             AudioControlFocusTarget.Persist -> true
@@ -136,6 +155,8 @@ internal fun AudioSelectionOverlay(
             AudioControlFocusTarget.DelayPlus -> delayPlusFocusRequester
             AudioControlFocusTarget.AmpMinus -> ampMinusFocusRequester
             AudioControlFocusTarget.AmpPlus -> ampPlusFocusRequester
+            AudioControlFocusTarget.LevelerMinus -> levelerMinusFocusRequester
+            AudioControlFocusTarget.LevelerPlus -> levelerPlusFocusRequester
             AudioControlFocusTarget.CenterMinus -> centerMinusFocusRequester
             AudioControlFocusTarget.CenterPlus -> centerPlusFocusRequester
             AudioControlFocusTarget.Persist -> persistFocusRequester
@@ -184,6 +205,8 @@ internal fun AudioSelectionOverlay(
                             canIncreaseDelay -> delayPlusFocusRequester
                             canDecreaseAmp -> ampMinusFocusRequester
                             canIncreaseAmp -> ampPlusFocusRequester
+                            canDecreaseLeveler -> levelerMinusFocusRequester
+                            canIncreaseLeveler -> levelerPlusFocusRequester
                             canDecreaseCenterMix -> centerMinusFocusRequester
                             canIncreaseCenterMix -> centerPlusFocusRequester
                             else -> persistFocusRequester
@@ -199,11 +222,15 @@ internal fun AudioSelectionOverlay(
                         isAmplificationAvailable = isAmplificationAvailable,
                         centerMixLevelDb = centerMixLevelDb,
                         isCenterMixAvailable = isCenterMixAvailable,
+                        dialogueLevelerLevel = dialogueLevelerLevel,
+                        isDialogueLevelerAvailable = isDialogueLevelerAvailable,
                         persistAmplification = persistAmplification,
                         delayMinusFocusRequester = delayMinusFocusRequester,
                         delayPlusFocusRequester = delayPlusFocusRequester,
                         ampMinusFocusRequester = ampMinusFocusRequester,
                         ampPlusFocusRequester = ampPlusFocusRequester,
+                        levelerMinusFocusRequester = levelerMinusFocusRequester,
+                        levelerPlusFocusRequester = levelerPlusFocusRequester,
                         centerMinusFocusRequester = centerMinusFocusRequester,
                         centerPlusFocusRequester = centerPlusFocusRequester,
                         persistFocusRequester = persistFocusRequester,
@@ -214,6 +241,10 @@ internal fun AudioSelectionOverlay(
                             onAmplificationChange(nextDb)
                         },
                         onCenterMixLevelChange = onCenterMixLevelChange,
+                        onDialogueLevelerChange = { nextLevel, focusTarget ->
+                            pendingControlFocusTarget = focusTarget
+                            onDialogueLevelerChange(nextLevel)
+                        },
                         onPersistAmplificationChange = onPersistAmplificationChange
                     )
                 }
@@ -370,11 +401,15 @@ private fun AudioControlsContent(
     isAmplificationAvailable: Boolean,
     centerMixLevelDb: Int,
     isCenterMixAvailable: Boolean,
+    dialogueLevelerLevel: Int,
+    isDialogueLevelerAvailable: Boolean,
     persistAmplification: Boolean,
     delayMinusFocusRequester: FocusRequester,
     delayPlusFocusRequester: FocusRequester,
     ampMinusFocusRequester: FocusRequester,
     ampPlusFocusRequester: FocusRequester,
+    levelerMinusFocusRequester: FocusRequester,
+    levelerPlusFocusRequester: FocusRequester,
     centerMinusFocusRequester: FocusRequester,
     centerPlusFocusRequester: FocusRequester,
     persistFocusRequester: FocusRequester,
@@ -382,6 +417,7 @@ private fun AudioControlsContent(
     onAudioDelayChange: (Int) -> Unit,
     onAmplificationChange: (Int, AudioControlFocusTarget) -> Unit,
     onCenterMixLevelChange: (Int) -> Unit,
+    onDialogueLevelerChange: (Int, AudioControlFocusTarget) -> Unit,
     onPersistAmplificationChange: (Boolean) -> Unit
 ) {
     val currentDelayMs = audioDelayMs.coerceIn(AUDIO_DELAY_MIN_MS, AUDIO_DELAY_MAX_MS)
@@ -393,23 +429,29 @@ private fun AudioControlsContent(
     val currentCenterMixDb = centerMixLevelDb.coerceIn(CENTER_MIX_LEVEL_MIN_DB, CENTER_MIX_LEVEL_MAX_DB)
     val canDecreaseCenterMix = isCenterMixAvailable && currentCenterMixDb > CENTER_MIX_LEVEL_MIN_DB
     val canIncreaseCenterMix = isCenterMixAvailable && currentCenterMixDb < CENTER_MIX_LEVEL_MAX_DB
+    val currentLevelerLevel = dialogueLevelerLevel.coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
+    val canDecreaseLeveler = isDialogueLevelerAvailable && currentLevelerLevel > DIALOGUE_LEVELER_MIN
+    val canIncreaseLeveler = isDialogueLevelerAvailable && currentLevelerLevel < DIALOGUE_LEVELER_MAX
 
     val firstDelayFocusRequester = if (canDecreaseDelay) {
         delayMinusFocusRequester
     } else {
         delayPlusFocusRequester
     }
-    val firstAmpFocusRequester = when {
-        canDecreaseAmp -> ampMinusFocusRequester
-        canIncreaseAmp -> ampPlusFocusRequester
-        canDecreaseCenterMix -> centerMinusFocusRequester
-        canIncreaseCenterMix -> centerPlusFocusRequester
-        else -> persistFocusRequester
-    }
     val firstCenterFocusRequester = when {
         canDecreaseCenterMix -> centerMinusFocusRequester
         canIncreaseCenterMix -> centerPlusFocusRequester
         else -> persistFocusRequester
+    }
+    val firstLevelerFocusRequester = when {
+        canDecreaseLeveler -> levelerMinusFocusRequester
+        canIncreaseLeveler -> levelerPlusFocusRequester
+        else -> firstCenterFocusRequester
+    }
+    val firstAmpFocusRequester = when {
+        canDecreaseAmp -> ampMinusFocusRequester
+        canIncreaseAmp -> ampPlusFocusRequester
+        else -> firstLevelerFocusRequester
     }
     val delayPlusLeftFocusRequester = if (canDecreaseDelay) {
         delayMinusFocusRequester
@@ -421,6 +463,11 @@ private fun AudioControlsContent(
     } else {
         leftFocusRequester
     }
+    val levelerPlusLeftFocusRequester = if (canDecreaseLeveler) {
+        levelerMinusFocusRequester
+    } else {
+        leftFocusRequester
+    }
     val centerPlusLeftFocusRequester = if (canDecreaseCenterMix) {
         centerMinusFocusRequester
     } else {
@@ -429,9 +476,23 @@ private fun AudioControlsContent(
     val persistLeftFocusRequester = when {
         canIncreaseCenterMix -> centerPlusFocusRequester
         canDecreaseCenterMix -> centerMinusFocusRequester
+        canIncreaseLeveler -> levelerPlusFocusRequester
+        canDecreaseLeveler -> levelerMinusFocusRequester
         canIncreaseAmp -> ampPlusFocusRequester
         canDecreaseAmp -> ampMinusFocusRequester
         else -> leftFocusRequester
+    }
+    val levelerLevelName = when (currentLevelerLevel) {
+        1 -> stringResource(R.string.audio_leveler_light)
+        2 -> stringResource(R.string.audio_leveler_medium)
+        3 -> stringResource(R.string.audio_leveler_strong)
+        4 -> stringResource(R.string.audio_leveler_max)
+        else -> stringResource(R.string.audio_leveler_off)
+    }
+    val levelerHelperText = if (isDialogueLevelerAvailable) {
+        stringResource(R.string.audio_leveler_help)
+    } else {
+        stringResource(R.string.audio_leveler_unavailable)
     }
     val centerHelperText = if (isCenterMixAvailable) {
         stringResource(R.string.audio_center_mix_help)
@@ -506,7 +567,7 @@ private fun AudioControlsContent(
                 minusLeftFocusRequester = leftFocusRequester,
                 plusLeftFocusRequester = ampPlusLeftFocusRequester,
                 upFocusRequester = firstDelayFocusRequester,
-                downFocusRequester = firstCenterFocusRequester,
+                downFocusRequester = firstLevelerFocusRequester,
                 onDecrease = {
                     val nextDb = currentDb - 1
                     val target = if (nextDb <= AUDIO_AMPLIFICATION_MIN_DB && canIncreaseAmp) {
@@ -534,6 +595,44 @@ private fun AudioControlsContent(
             )
 
             AdjustmentSection(
+                title = stringResource(R.string.audio_leveler_label),
+                valueText = levelerLevelName,
+                helperText = levelerHelperText,
+                canDecrease = canDecreaseLeveler,
+                canIncrease = canIncreaseLeveler,
+                minusFocusRequester = levelerMinusFocusRequester,
+                plusFocusRequester = levelerPlusFocusRequester,
+                minusLeftFocusRequester = leftFocusRequester,
+                plusLeftFocusRequester = levelerPlusLeftFocusRequester,
+                upFocusRequester = firstAmpFocusRequester,
+                downFocusRequester = firstCenterFocusRequester,
+                onDecrease = {
+                    val nextLevel = currentLevelerLevel - 1
+                    val target = if (nextLevel <= DIALOGUE_LEVELER_MIN && canIncreaseLeveler) {
+                        AudioControlFocusTarget.LevelerPlus
+                    } else {
+                        AudioControlFocusTarget.LevelerMinus
+                    }
+                    onDialogueLevelerChange(nextLevel, target)
+                    if (nextLevel <= DIALOGUE_LEVELER_MIN && canIncreaseLeveler) {
+                        runCatching { levelerPlusFocusRequester.requestFocus() }
+                    }
+                },
+                onIncrease = {
+                    val nextLevel = currentLevelerLevel + 1
+                    val target = if (nextLevel >= DIALOGUE_LEVELER_MAX && canDecreaseLeveler) {
+                        AudioControlFocusTarget.LevelerMinus
+                    } else {
+                        AudioControlFocusTarget.LevelerPlus
+                    }
+                    onDialogueLevelerChange(nextLevel, target)
+                    if (nextLevel >= DIALOGUE_LEVELER_MAX && canDecreaseLeveler) {
+                        runCatching { levelerMinusFocusRequester.requestFocus() }
+                    }
+                }
+            )
+
+            AdjustmentSection(
                 title = stringResource(R.string.audio_center_mix_label),
                 valueText = stringResource(R.string.audio_center_mix_value_db, currentCenterMixDb),
                 helperText = centerHelperText,
@@ -543,7 +642,7 @@ private fun AudioControlsContent(
                 plusFocusRequester = centerPlusFocusRequester,
                 minusLeftFocusRequester = leftFocusRequester,
                 plusLeftFocusRequester = centerPlusLeftFocusRequester,
-                upFocusRequester = firstAmpFocusRequester,
+                upFocusRequester = firstLevelerFocusRequester,
                 downFocusRequester = persistFocusRequester,
                 onDecrease = {
                     val nextDb = currentCenterMixDb - 1
@@ -733,6 +832,8 @@ private enum class AudioControlFocusTarget {
     DelayPlus,
     AmpMinus,
     AmpPlus,
+    LevelerMinus,
+    LevelerPlus,
     CenterMinus,
     CenterPlus,
     Persist

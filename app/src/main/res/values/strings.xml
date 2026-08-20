@@ -1696,6 +1696,14 @@
     <string name="audio_mix_range">Range: %1$d dB to %2$d dB</string>
     <string name="audio_mix_range_saved">Range: %1$d dB to %2$d dB (saved)</string>
     <string name="audio_mix_unavailable">Amplification is not available on this device</string>
+    <string name="audio_leveler_label">Dialogue Leveler (DRC)</string>
+    <string name="audio_leveler_help">Evens out quiet speech against loud music and effects</string>
+    <string name="audio_leveler_unavailable">Dialogue Leveler is not available on this player engine</string>
+    <string name="audio_leveler_off">Off</string>
+    <string name="audio_leveler_light">Light</string>
+    <string name="audio_leveler_medium">Medium</string>
+    <string name="audio_leveler_strong">Strong</string>
+    <string name="audio_leveler_max">Max</string>
     <string name="audio_center_mix_label">Downmix: Center Mix Level</string>
     <string name="audio_center_mix_value_db">%1$d dB</string>
     <string name="audio_center_mix_help">Center Mix Level in dB relative to metadata or default (-3 dB)</string>
