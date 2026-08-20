@@ -825,6 +825,7 @@ internal fun PlayerRuntimeController.initializePlayer(
                     if (pv != null) pv.videoBoundsFraction(videoAspectRatio) else null
                 },
                 gainAudioProcessor = gainAudioProcessor,
+                compressorAudioProcessor = compressorAudioProcessor,
                 downmixEnabled = effectiveDownmixEnabled,
                 audioOutputChannels = effectiveAudioOutputChannels,
                 downmixNormalizationEnabled = !playerSettings.maintainOriginalAudioOnDownmix,
@@ -2019,6 +2020,7 @@ private class SubtitleOffsetRenderersFactory(
     private val isSidecarAddonSubtitleActiveProvider: () -> Boolean = { false },
     private val videoBoundsFractionProvider: () -> RectF?,
     private val gainAudioProcessor: GainAudioProcessor,
+    private val compressorAudioProcessor: CompressorAudioProcessor,
     private val downmixEnabled: Boolean,
     private val audioOutputChannels: com.nuvio.tv.data.local.AudioOutputChannels,
     private val downmixNormalizationEnabled: Boolean,
@@ -2083,7 +2085,8 @@ private class SubtitleOffsetRenderersFactory(
         }
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
-            .setAudioProcessors(arrayOf(gainAudioProcessor))
+            // Compressor first so it levels the source dynamics, then the user's manual gain.
+            .setAudioProcessors(arrayOf(compressorAudioProcessor, gainAudioProcessor))
         val baseAudioSink = builder.build()
         val playbackSpeedAwareAudioSink = PlaybackSpeedAwareAudioSink(
             sink = baseAudioSink,
