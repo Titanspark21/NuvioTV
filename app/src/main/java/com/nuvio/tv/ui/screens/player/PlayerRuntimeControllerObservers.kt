@@ -285,6 +285,9 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                 settings.persistAudioAmplification -> settings.centerMixLevelDb
                 else -> currentState.centerMixLevelDb
             }
+            // The dialogue leveler is always remembered across sessions (its own preference,
+            // independent of the amplification persist toggle), so the stored value always wins.
+            val resolvedDialogueLevelerLevel = settings.dialogueLevelerLevel
 
             _uiState.update { state ->
                 val shouldShowOverlay = when {
@@ -312,7 +315,8 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
                             resolvedInternalPlayerEngine != InternalPlayerEngine.MVP_PLAYER,
                     persistAudioAmplification = settings.persistAudioAmplification,
                     audioAmplificationDb = resolvedAudioAmplificationDb,
-                    centerMixLevelDb = resolvedCenterMixLevelDb
+                    centerMixLevelDb = resolvedCenterMixLevelDb,
+                    dialogueLevelerLevel = resolvedDialogueLevelerLevel
                 )
             }
 
@@ -321,6 +325,12 @@ internal fun PlayerRuntimeController.observeSubtitleSettings() {
             }
             if (resolvedCenterMixLevelDb != currentState.centerMixLevelDb) {
                 applyCenterMixLevel(resolvedCenterMixLevelDb)
+            }
+            if (resolvedDialogueLevelerLevel != currentState.dialogueLevelerLevel ||
+                !hasInitializedDialogueLevelerForSession
+            ) {
+                hasInitializedDialogueLevelerForSession = true
+                applyDialogueLeveler(resolvedDialogueLevelerLevel)
             }
 
             if (settings.rememberAudioDelayPerDevice && !wasRememberingAudioDelayPerDevice) {
