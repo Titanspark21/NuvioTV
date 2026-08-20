@@ -1348,6 +1348,8 @@ fun PlayerScreen(
             persistAmplification = uiState.persistAudioAmplification,
             centerMixLevelDb = uiState.centerMixLevelDb,
             isCenterMixAvailable = uiState.isCenterMixAvailable,
+            dialogueLevelerLevel = uiState.dialogueLevelerLevel,
+            isDialogueLevelerAvailable = uiState.isDialogueLevelerAvailable,
             onTrackSelected = { viewModel.onEvent(PlayerEvent.OnSelectAudioTrack(it)) },
             onAudioDelayChange = { viewModel.onEvent(PlayerEvent.OnSetAudioDelayMs(it)) },
             onAmplificationChange = { viewModel.onEvent(PlayerEvent.OnSetAudioAmplificationDb(it)) },
@@ -1356,6 +1358,9 @@ fun PlayerScreen(
             },
             onCenterMixLevelChange = {
                 viewModel.onEvent(PlayerEvent.OnSetCenterMixLevelDb(it))
+            },
+            onDialogueLevelerChange = {
+                viewModel.onEvent(PlayerEvent.OnSetDialogueLevelerLevel(it))
             },
             onDismiss = { viewModel.onEvent(PlayerEvent.OnDismissTransientOverlay) },
             modifier = Modifier
