@@ -229,6 +229,7 @@ data class PlayerSettings(
     val skipSilence: Boolean = false,
     val audioAmplificationDb: Int = 0,
     val centerMixLevelDb: Int = 0,
+    val dialogueLevelerLevel: Int = 0,
     val persistAudioAmplification: Boolean = false,
     val rememberAudioDelayPerDevice: Boolean = true,
     val preferredAudioLanguage: String = AudioLanguageOption.DEVICE,
@@ -469,6 +470,8 @@ class PlayerSettingsDataStore @Inject constructor(
         private const val AUDIO_AMPLIFICATION_DB_MAX = 10
         private const val CENTER_MIX_LEVEL_DB_MIN = -10
         private const val CENTER_MIX_LEVEL_DB_MAX = 30
+        private const val DIALOGUE_LEVELER_LEVEL_MIN = 0
+        private const val DIALOGUE_LEVELER_LEVEL_MAX = 4
     }
 
     private fun store(profileId: Int = profileManager.activeProfileId.value) =
@@ -494,6 +497,7 @@ class PlayerSettingsDataStore @Inject constructor(
     private val skipSilenceKey = booleanPreferencesKey("skip_silence")
     private val audioAmplificationDbKey = intPreferencesKey("audio_amplification_db")
     private val centerMixLevelDbKey = intPreferencesKey("center_mix_level_db")
+    private val dialogueLevelerLevelKey = intPreferencesKey("dialogue_leveler_level")
     private val persistAudioAmplificationKey = booleanPreferencesKey("persist_audio_amplification")
     private val rememberAudioDelayPerDeviceKey = booleanPreferencesKey("remember_audio_delay_per_device")
     private val preferredAudioLanguageKey = stringPreferencesKey("preferred_audio_language")
@@ -842,6 +846,10 @@ class PlayerSettingsDataStore @Inject constructor(
                     CENTER_MIX_LEVEL_DB_MIN,
                     CENTER_MIX_LEVEL_DB_MAX
                 ),
+                dialogueLevelerLevel = (prefs[dialogueLevelerLevelKey] ?: 0).coerceIn(
+                    DIALOGUE_LEVELER_LEVEL_MIN,
+                    DIALOGUE_LEVELER_LEVEL_MAX
+                ),
                 persistAudioAmplification = prefs[persistAudioAmplificationKey] ?: false,
                 rememberAudioDelayPerDevice = prefs[rememberAudioDelayPerDeviceKey] ?: true,
                 preferredAudioLanguage = normalizeSelectableLanguageCode(
@@ -1094,6 +1102,15 @@ class PlayerSettingsDataStore @Inject constructor(
             prefs[centerMixLevelDbKey] = db.coerceIn(
                 CENTER_MIX_LEVEL_DB_MIN,
                 CENTER_MIX_LEVEL_DB_MAX
+            )
+        }
+    }
+
+    suspend fun setDialogueLevelerLevel(level: Int) {
+        store().edit { prefs ->
+            prefs[dialogueLevelerLevelKey] = level.coerceIn(
+                DIALOGUE_LEVELER_LEVEL_MIN,
+                DIALOGUE_LEVELER_LEVEL_MAX
             )
         }
     }
