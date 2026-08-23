@@ -230,4 +230,5 @@ internal fun PlayerRuntimeController.applyMpvBluetoothAudioRouteInPlace(isBlueto
     // ao-reload can drop live properties; re-pin the current per-route delay.
     view.setAudioDelayMs(_uiState.value.audioDelayMs)
     view.applyAudioAmplificationDb(_uiState.value.audioAmplificationDb)
+    view.applyDialogueLeveler(_uiState.value.dialogueLevelerLevel)
 }

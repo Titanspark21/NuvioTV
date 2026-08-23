@@ -1698,7 +1698,7 @@
     <string name="audio_mix_unavailable">Amplification is not available on this device</string>
     <string name="audio_leveler_label">Dialogue Leveler (DRC)</string>
     <string name="audio_leveler_help">Evens out quiet speech against loud music and effects</string>
-    <string name="audio_leveler_unavailable">Dialogue Leveler is not available on this player engine</string>
+    <string name="audio_leveler_unavailable">Dialogue Leveler is not available on the current audio output</string>
     <string name="audio_leveler_off">Off</string>
     <string name="audio_leveler_light">Light</string>
     <string name="audio_leveler_medium">Medium</string>
@@ -3116,4 +3116,3 @@
     <string name="night_mode_strength_subtitle">How much the screen is dimmed</string>
 
 </resources>
-

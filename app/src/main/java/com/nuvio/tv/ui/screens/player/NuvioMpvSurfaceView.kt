@@ -22,6 +22,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
     private var lastMediaRequestKey: String? = null
     private var pendingInitialMediaUrl: String? = null
     private var pendingInitialStartOption: String? = null
+    private var appliedDialogueLevelerLevel: Int? = null
     private var hardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE
     private var currentAspectMode: AspectMode = AspectMode.ORIGINAL
     private var pendingAspectRetryCount = 0
@@ -212,6 +213,35 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         }.onFailure {
             Log.w(TAG, "Failed to apply audio amplification on mpv (db=$clampedDb): ${it.message}")
         }
+    }
+
+    /**
+     * Keep Dialogue Leveler available when Auto selects MPV. A named filter lets us replace only
+     * Nuvio's compressor without disturbing mpv's own filters (including pitch correction).
+     */
+    fun applyDialogueLeveler(level: Int): Boolean {
+        if (!initialized) return false
+        val clampedLevel = level.coerceIn(DIALOGUE_LEVELER_OFF, DIALOGUE_LEVELER_MAX)
+        if (appliedDialogueLevelerLevel == clampedLevel) return true
+
+        // Removing a label that is not present may report an error on some mpv builds. It is
+        // harmless and must not prevent the replacement filter from being installed.
+        runCatching {
+            mpv.command("af", "remove", "@$MPV_DIALOGUE_LEVELER_FILTER_LABEL")
+        }
+
+        val filter = buildMpvDialogueLevelerFilter(clampedLevel)
+        if (filter == null) {
+            appliedDialogueLevelerLevel = DIALOGUE_LEVELER_OFF
+            return true
+        }
+        val applied = runCatching {
+            mpv.command("af", "add", filter)
+        }.onFailure {
+            Log.w(TAG, "Failed to apply Dialogue Leveler on mpv (level=$clampedLevel): ${it.message}")
+        }.isSuccess
+        if (applied) appliedDialogueLevelerLevel = clampedLevel
+        return applied
     }
 
     fun applyAudioLanguagePreferences(languages: List<String>) {
@@ -575,6 +605,7 @@ class NuvioMpvSurfaceView @JvmOverloads constructor(
         lastMediaRequestKey = null
         pendingInitialMediaUrl = null
         pendingInitialStartOption = null
+        appliedDialogueLevelerLevel = null
     }
 
     override fun initOptions() {

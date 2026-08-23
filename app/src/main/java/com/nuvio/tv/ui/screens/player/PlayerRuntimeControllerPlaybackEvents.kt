@@ -95,22 +95,28 @@ internal fun PlayerRuntimeController.applyAudioAmplification(db: Int) {
 
 internal fun PlayerRuntimeController.applyDialogueLeveler(level: Int) {
     val clampedLevel = level.coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
-    // The compressor lives only in the ExoPlayer PCM chain, so it is available when an ExoPlayer
-    // is running (the MPV engine handles its own audio and is left untouched here).
-    val isAvailable = _exoPlayer != null
+    val isMpv = isUsingMpvEngine()
+    val isExoAvailable = !isMpv && _exoPlayer != null
     val wasActive = compressorAudioProcessor.isLevelerEnabled()
-    compressorAudioProcessor.setLevel(if (isAvailable) clampedLevel else DIALOGUE_LEVELER_OFF)
+    compressorAudioProcessor.setLevel(if (isExoAvailable) clampedLevel else DIALOGUE_LEVELER_OFF)
     val isActiveNow = compressorAudioProcessor.isLevelerEnabled()
 
     // Toggling the processor between active and inactive changes the sink's processing
     // requirement; nudge it (and re-derive track selection) exactly as amplification does so the
     // new chain takes effect without recreating the player.
-    if (wasActive != isActiveNow && !isUsingMpvEngine()) {
+    if (wasActive != isActiveNow && !isMpv) {
         playbackSpeedAwareAudioSink?.notifyAudioProcessingRequirementChanged()
         _exoPlayer?.let { player ->
             player.trackSelectionParameters = player.trackSelectionParameters.buildUpon().build()
         }
     }
+
+    val isMpvAvailable = if (isMpv) {
+        mpvView?.applyDialogueLeveler(clampedLevel) == true
+    } else {
+        false
+    }
+    val isAvailable = isExoAvailable || isMpvAvailable
 
     _uiState.update {
         it.copy(
@@ -141,11 +147,19 @@ internal fun PlayerRuntimeController.updateAudioControlAvailability(
     gainAudioProcessor.setGainDb(
         if (isAudioAmplificationAvailable) clampedDb else AUDIO_AMPLIFICATION_MIN_DB
     )
-    val isDialogueLevelerAvailable = _exoPlayer != null
     val clampedLevel = _uiState.value.dialogueLevelerLevel
         .coerceIn(DIALOGUE_LEVELER_MIN, DIALOGUE_LEVELER_MAX)
+    val isDialogueLevelerAvailable = if (isUsingMpvEngine()) {
+        mpvView?.applyDialogueLeveler(clampedLevel) == true
+    } else {
+        _exoPlayer != null
+    }
     compressorAudioProcessor.setLevel(
-        if (isDialogueLevelerAvailable) clampedLevel else DIALOGUE_LEVELER_OFF
+        if (!isUsingMpvEngine() && isDialogueLevelerAvailable) {
+            clampedLevel
+        } else {
+            DIALOGUE_LEVELER_OFF
+        }
     )
     _uiState.update { state ->
         state.copy(
