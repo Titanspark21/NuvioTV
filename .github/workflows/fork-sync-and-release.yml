@@ -175,6 +175,10 @@ jobs:
       - name: Set up Gradle
         if: steps.decide.outputs.proceed == 'true'
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # This self-hosted runner keeps Gradle state locally. Avoid the remote
+          # cache save in the post-job hook, which can outlive the release itself.
+          cache-disabled: true
 
       - name: Write build configuration
         if: steps.decide.outputs.proceed == 'true'
