@@ -28,17 +28,18 @@ installable by anyone.
 
 ## Releases
 
-A GitHub Actions workflow rebases onto upstream every 6 hours and publishes a signed release
-when upstream moves. The app's in-app updater points at this repo, so a successful run is what
-makes the TV offer an update. Failures never publish, and each opens a GitHub issue. See
-[FORK.md](FORK.md) for the three failure modes.
+A GitHub Actions workflow fetches upstream every 6 hours, merges upstream/dev into the fork, and
+publishes a signed release when upstream moves. The app's in-app updater points at this repo, so
+a successful run is what makes the TV offer an update. Failures never publish, and each opens a
+GitHub issue. See [FORK.md](FORK.md) for the three failure modes.
 
 ## Features this fork adds
 
 Surprise me (screen + detail-page shuffle button, long-press to pick the stream, next suggestion
 preloaded); play a random episode; a Top rated tab listing episodes by rating; night mode
-dimming with a 6am switch-off; next-episode stream chosen before the current episode ends; and
-Addon speed.
+dimming with a 6am switch-off; next-episode stream chosen before the current episode ends;
+Addon speed; and Dialogue Leveler, an in-player dynamic-range compressor that evens quiet speech
+against loud music and effects on both internal playback engines.
 
 **Addon speed** lives at Settings → Playback → Addon speed, in both Essential and Advanced
 modes. It shows a 30-day rolling history recorded passively from normal use — per addon, split
@@ -74,9 +75,9 @@ channel/preview-program sync, the home layout picker, colour themes, IAMF and MP
 
 ## Constraints and edge cases
 
-- **Sync must stay hands-off.** The owner is not a developer and cannot resolve a rebase
-  conflict. Every change should therefore prefer small, self-contained edits in files upstream
-  rarely touches; anything that widens the conflict surface is a real cost, not a stylistic one.
+- **Sync must stay hands-off.** The owner is not a developer and cannot resolve a merge conflict.
+  Every change should therefore prefer small, self-contained edits in files upstream rarely
+  touches; anything that widens the conflict surface is a real cost, not a stylistic one.
 - **Upstream's unit tests do not compile**, so `./gradlew test` cannot be used as a gate. Any CI
   guard must not depend on compiling the test source set.
 - `scripts/` is gitignored wholesale; anything CI needs from it must be un-ignored explicitly.

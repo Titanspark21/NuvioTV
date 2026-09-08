@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+git ls-files | LC_ALL=C sort > tree.txt
+git add tree.txt

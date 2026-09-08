@@ -7,7 +7,6 @@ import com.squareup.moshi.JsonClass
 data class StreamResponseDto(
     @Json(name = "streams") val streams: List<StreamDto>? = null
 )
-
 @JsonClass(generateAdapter = true)
 data class StreamDto(
     @Json(name = "name") val name: String? = null,
@@ -109,5 +108,6 @@ data class ProxyHeadersDto(
 data class SubtitleDto(
     @Json(name = "id") val id: String? = null,
     @Json(name = "url") val url: String,
-    @Json(name = "lang") val lang: String
+    @Json(name = "lang") val lang: String,
+    @Json(name = "headers") val headers: Map<String, String>? = null
 )

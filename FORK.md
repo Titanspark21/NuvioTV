@@ -1,7 +1,7 @@
 # What this fork changes
 
 `Titanspark21/NuvioTV` tracks [NuvioMedia/NuvioTV](https://github.com/NuvioMedia/NuvioTV)
-and rebases onto it every 6 hours, publishing a signed APK whenever upstream moves. Everything
+and merges it every 6 hours, publishing a signed APK whenever upstream moves. Everything
 below is this fork's own work, sitting as ordinary commits on top of upstream.
 
 This file is the list. It is kept accurate as changes land; the commit history is the
@@ -20,6 +20,11 @@ auto-playing; the next suggestion is preloaded so a re-roll is instant.
 **Top rated tab** — every episode of a show listed by rating, opened at the top.
 
 **Night mode** — screen dimming that switches itself off at 6am, closable from the player.
+
+**Dialogue Leveler** (Player → Audio) — a four-level dynamic-range compressor that lifts quiet
+speech and tames loud music/effects. It runs on both ExoPlayer PCM and MPV, keeps stereo channels
+linked, caps peaks safely, remembers the selected level, and reapplies its MPV filter after an
+audio-output reload.
 
 **Addon speed** (Settings → Playback → Addon speed) — how fast each addon actually answers.
 Two things in one screen:
@@ -95,7 +100,7 @@ Also kept, against what other forks strip: **all four ABIs and the universal APK
 
 ## Release automation
 
-`.github/workflows/fork-sync-and-release.yml` rebases onto upstream every 6 hours and publishes
+`.github/workflows/fork-sync-and-release.yml` merges upstream every 6 hours and publishes
 a signed release only if everything passes. Three things can stop it, and each opens a GitHub
 issue rather than only reddening the Actions tab:
 

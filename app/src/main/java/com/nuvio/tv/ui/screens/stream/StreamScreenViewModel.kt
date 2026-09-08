@@ -23,6 +23,7 @@ import com.nuvio.tv.core.tracking.TrackingScrobbleAction
 import com.nuvio.tv.core.tracking.TrackingScrobbleCoordinator
 import com.nuvio.tv.core.tracking.TrackingScrobbleEvent
 import com.nuvio.tv.core.tracking.buildTrackingMediaReference
+import com.nuvio.tv.core.util.parseRuntimeMinutes
 import com.nuvio.tv.core.streams.StreamBadgePresentation
 import com.nuvio.tv.data.local.PlayerPreference
 import com.nuvio.tv.data.local.PlayerSettings
@@ -44,6 +45,8 @@ import com.nuvio.tv.domain.repository.StreamRepository
 import com.nuvio.tv.domain.repository.WatchProgressRepository
 import com.nuvio.tv.ui.components.SourceChipItem
 import com.nuvio.tv.ui.components.SourceChipStatus
+import com.nuvio.tv.ui.screens.player.StreamSidecarSubtitles
+import com.nuvio.tv.ui.util.localizedGenreLabel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Job
@@ -87,6 +90,7 @@ class StreamScreenViewModel @Inject constructor(
     private val subtitleRepository: com.nuvio.tv.domain.repository.SubtitleRepository,
     private val subtitleFileCache: com.nuvio.tv.core.player.SubtitleFileCache,
     private val torrentService: TorrentService,
+    profileManager: com.nuvio.tv.core.profile.ProfileManager,
     savedStateHandle: SavedStateHandle
 ) : ViewModel() {
     private var autoPlayHandledForSession = false
@@ -125,6 +129,8 @@ class StreamScreenViewModel @Inject constructor(
     private val contentId: String? = savedStateHandle.getOptionalString("contentId")
     private val contentName: String? = savedStateHandle.getOptionalString("contentName")
     private val contentLanguage: String? = savedStateHandle.getOptionalString("contentLanguage")
+    private val playbackProfileId: Int = savedStateHandle.get<String>("profileId")?.toIntOrNull()
+        ?: profileManager.activeProfileId.value
     private val manualSelection: Boolean = savedStateHandle.get<String>("manualSelection")
         ?.toBooleanStrictOrNull()
         ?: false
@@ -426,6 +432,7 @@ class StreamScreenViewModel @Inject constructor(
                                 episode = episode,
                                 episodeTitle = episodeName,
                                 bingeGroup = cached.bingeGroup,
+                                profileId = playbackProfileId,
                                 filename = cached.filename,
                                 videoHash = cached.videoHash,
                                 videoSize = cached.videoSize,
@@ -1051,7 +1058,8 @@ class StreamScreenViewModel @Inject constructor(
             val meta = result.data
             playbackMetaVideos = meta.videos
             if (!requiresMetadataLookup) return@launch
-            val metaGenres = meta.genres.takeIf { it.isNotEmpty() }?.joinToString(" • ")
+            val metaGenres = meta.genres.takeIf { it.isNotEmpty() }
+                ?.joinToString(" • ") { localizedGenreLabel(context, it) }
             val metaYear = meta.releaseInfo
                 ?.substringBefore("-")
                 ?.takeIf { it.isNotBlank() }
@@ -1090,9 +1098,7 @@ class StreamScreenViewModel @Inject constructor(
         if (season != null && episode != null) {
             return meta.videos.firstOrNull { it.season == season && it.episode == episode }?.runtime
         }
-        return meta.runtime
-            ?.let { Regex("(\\d+)").find(it)?.groupValues?.getOrNull(1) }
-            ?.toIntOrNull()
+        return parseRuntimeMinutes(meta.runtime)
     }
 
     private fun filterByAddon(addonName: String?) {
@@ -1163,6 +1169,7 @@ class StreamScreenViewModel @Inject constructor(
                     filename = result.filename ?: basePlaybackInfo.filename,
                     videoSize = result.videoSize ?: basePlaybackInfo.videoSize
                 )
+                StreamSidecarSubtitles.set(result.url, stream.subtitles)
                 // Save resolved URL to cache for reuse last link
                 if (!result.url.isNullOrBlank()) {
                     pendingCacheSaveJob = viewModelScope.launch {
@@ -1324,6 +1331,7 @@ class StreamScreenViewModel @Inject constructor(
             episode = episode,
             episodeTitle = episodeName,
             bingeGroup = stream.behaviorHints?.bingeGroup,
+            profileId = playbackProfileId,
             filename = stream.behaviorHints?.filename,
             videoHash = stream.behaviorHints?.videoHash,
             videoSize = stream.behaviorHints?.videoSize,
@@ -1334,6 +1342,7 @@ class StreamScreenViewModel @Inject constructor(
             sources = stream.sources,
             contentLanguage = contentLanguage
         )
+        StreamSidecarSubtitles.set(playbackUrlFor(playbackInfo), stream.subtitles)
 
         val url = playbackInfo.url
         if (!url.isNullOrBlank() && !playbackInfo.isExternal) {
@@ -1384,9 +1393,14 @@ class StreamScreenViewModel @Inject constructor(
     suspend fun getResumePositionMs(playbackInfo: StreamPlaybackInfo): Long {
         val contentId = playbackInfo.contentId ?: return 0L
         val progress = if (playbackInfo.season != null && playbackInfo.episode != null) {
-            watchProgressRepository.getEpisodeProgress(contentId, playbackInfo.season, playbackInfo.episode)
+            watchProgressRepository.getEpisodeProgress(
+                contentId,
+                playbackInfo.season,
+                playbackInfo.episode,
+                playbackInfo.profileId
+            )
         } else {
-            watchProgressRepository.getProgress(contentId)
+            watchProgressRepository.getProgress(contentId, playbackInfo.profileId)
         }
         val wp = progress.first() ?: return 0L
         // Don't resume if completed
@@ -1406,6 +1420,7 @@ class StreamScreenViewModel @Inject constructor(
         playbackInfo: StreamPlaybackInfo,
         url: String,
         resumePositionMs: Long = 0L,
+        startFromBeginning: Boolean = false,
         autoLaunch: Boolean = false,
         context: android.content.Context
     ) {
@@ -1579,7 +1594,8 @@ class StreamScreenViewModel @Inject constructor(
             season = playbackInfo.season,
             episode = playbackInfo.episode,
             episodeTitle = playbackInfo.episodeTitle,
-            year = playbackInfo.year
+            year = playbackInfo.year,
+            profileId = playbackInfo.profileId
         )
 
         val settings = playerSettingsDataStore.playerSettings.first()
@@ -1611,6 +1627,7 @@ class StreamScreenViewModel @Inject constructor(
             title = metadata.buildPlayerTitle(),
             headers = playbackInfo.headers,
             resumePositionMs = resumePositionMs,
+            startFromBeginning = startFromBeginning,
             subtitles = subtitleInputs,
             autoLaunch = autoLaunch,
             nextEpisodeSnapshot = playbackMetaVideos?.let { videos ->
@@ -1670,7 +1687,7 @@ class StreamScreenViewModel @Inject constructor(
         }
 
         return try {
-            val allSubtitles = subtitleRepository.getSubtitles(
+            val addonSubtitles = subtitleRepository.getSubtitles(
                 type = metadata.contentType,
                 id = metadata.contentId,
                 videoId = metadata.videoId,
@@ -1690,6 +1707,9 @@ class StreamScreenViewModel @Inject constructor(
                     }
                 }
             )
+            val allSubtitles = (
+                StreamSidecarSubtitles.forUrl(playbackUrlFor(playbackInfo).orEmpty()) + addonSubtitles
+            ).distinctBy { "${it.id}|${it.url}" }
 
             // Filter to preferred languages only
             val filtered = allSubtitles.filter { subtitle ->
@@ -1755,7 +1775,7 @@ class StreamScreenViewModel @Inject constructor(
             )
             Log.d(TAG, "Saving external player progress: pos=${positionMs}ms, dur=${effectiveDuration}ms, " +
                 "content=$contentId, video=$videoId")
-            watchProgressRepository.saveProgress(progress)
+            watchProgressRepository.saveProgress(progress, playbackInfo.profileId)
 
             val progressPercent = if (effectiveDuration > 0L) {
                 (positionMs.toFloat() / effectiveDuration.toFloat() * 100f).coerceIn(0f, 100f)
@@ -1834,6 +1854,7 @@ data class StreamPlaybackInfo(
     val episode: Int?,
     val episodeTitle: String?,
     val bingeGroup: String?,
+    val profileId: Int,
     val filename: String? = null,
     val videoHash: String? = null,
     val videoSize: Long? = null,
@@ -1844,6 +1865,10 @@ data class StreamPlaybackInfo(
     val sources: List<String>? = null,
     val contentLanguage: String? = null
 )
+
+private fun playbackUrlFor(playbackInfo: StreamPlaybackInfo): String? =
+    playbackInfo.url?.takeIf { it.isNotBlank() }
+        ?: if (playbackInfo.isTorrent) playbackInfo.infoHash?.let { "torrent://$it" } else null
 
 private fun Stream.isReadyForDebridPreparation(): Boolean =
     getStreamUrl() == null &&

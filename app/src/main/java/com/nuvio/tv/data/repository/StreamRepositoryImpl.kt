@@ -195,7 +195,7 @@ class StreamRepositoryImpl @Inject constructor(
                             // request itself so the number is the addon's latency, not the
                             // app's processing of what it returned.
                             val startedAt = System.currentTimeMillis()
-                            val streamsResult = getStreamsFromAddon(addon.baseUrl, type, videoId)
+                            val streamsResult = getStreamsFromAddon(addon, type, videoId)
                             addonSpeedLog.record(
                                 addonName = addon.displayName,
                                 kind = com.nuvio.tv.addonspeed.AddonCallKind.STREAM,
@@ -534,7 +534,8 @@ class StreamRepositoryImpl @Inject constructor(
             ytId = null,
             externalUrl = null,
             quality = quality,
-            qualityValue = parseQualityValue(quality)
+            qualityValue = parseQualityValue(quality),
+            subtitles = subtitles
         )
     }
 
@@ -572,11 +573,11 @@ class StreamRepositoryImpl @Inject constructor(
     }
 
     override suspend fun getStreamsFromAddon(
-        baseUrl: String,
+        addon: Addon,
         type: String,
         videoId: String
     ): NetworkResult<List<Stream>> {
-        val cleanBaseUrl = baseUrl.trimEnd('/')
+        val cleanBaseUrl = addon.baseUrl.trimEnd('/')
         val queryStart = cleanBaseUrl.indexOf('?')
         val basePath = if (queryStart >= 0) cleanBaseUrl.substring(0, queryStart).trimEnd('/') else cleanBaseUrl
         val baseQuery = if (queryStart >= 0) cleanBaseUrl.substring(queryStart) else ""
@@ -585,16 +586,12 @@ class StreamRepositoryImpl @Inject constructor(
         val streamUrl = "$basePath/stream/$encodedType/$encodedVideoId.json$baseQuery"
         Log.d(TAG, "Fetching streams type=$type videoId=$videoId url=$streamUrl")
 
-        // First, get addon info for name and logo
-        val addonResult = addonRepository.fetchAddon(baseUrl)
-        val addonName = when (addonResult) {
-            is NetworkResult.Success -> addonResult.data.displayName
-            else -> context.getString(com.nuvio.tv.R.string.stream_addon_unknown)
-        }
-        val addonLogo = when (addonResult) {
-            is NetworkResult.Success -> addonResult.data.logo
-            else -> null
-        }
+        // Display info comes from the installed addon the caller already holds. Calling
+        // addonRepository.fetchAddon() here caused an unconditional manifest GET ahead of every
+        // queried addon's stream request: fetchAddon is the low-level fetch that does not consult
+        // the cache, so this sidestepped the manifest-cache policy in AddonRepositoryImpl.
+        val addonName = addon.displayName
+        val addonLogo = addon.logo
 
         return when (val result = safeApiCall(context) { api.getStreams(streamUrl) }) {
             is NetworkResult.Success -> {

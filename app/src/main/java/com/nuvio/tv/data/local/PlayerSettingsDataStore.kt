@@ -1,5 +1,6 @@
 package com.nuvio.tv.data.local
 
+import android.util.Log
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -41,6 +42,10 @@ val SubtitleLanguage.displayName: String
     get() = languageCodeToName(code)
 
 const val SUBTITLE_LANGUAGE_FORCED = "forced"
+
+object SubtitleLanguageOption {
+    const val DEVICE = "device"
+}
 
 val AVAILABLE_SUBTITLE_LANGUAGES = listOf(
     SubtitleLanguage("af", "Afrikaans"),
@@ -134,6 +139,7 @@ val AVAILABLE_TMDB_LANGUAGES = AVAILABLE_SUBTITLE_LANGUAGES + listOf(
  */
 data class SubtitleStyleSettings(
     val preferredLanguage: String = "en",
+    val isPreferredLanguageSystemDefault: Boolean = true,
     val secondaryPreferredLanguage: String? = null,
     val useForcedSubtitles: Boolean = false,
     val showOnlyPreferredLanguages: Boolean = false,
@@ -253,6 +259,7 @@ data class PlayerSettings(
     // Only honored when dv7HandlingMode is OFF or DV81_LIBDOVI.
     val dv7LibdoviModeOverride: Int = -1,
     val stripHdr10PlusSei: Boolean = false,
+    val mpvHi10pGnextSoftwareFallbackEnabled: Boolean = false,
     val mpvHardwareDecodeMode: MpvHardwareDecodeMode = MpvHardwareDecodeMode.AUTO_SAFE,
     // Display settings
     val frameRateMatchingMode: FrameRateMatchingMode = FrameRateMatchingMode.OFF,
@@ -263,6 +270,8 @@ data class PlayerSettings(
     val streamAutoPlaySelectedAddons: Set<String> = emptySet(),
     val streamAutoPlaySelectedPlugins: Set<String> = emptySet(),
     val streamAutoPlayRegex: String = "",
+    val postPlayRecommendationsEnabled: Boolean = true,
+    val postPlayMovieThresholdPercent: Int = DEFAULT_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
     val streamAutoPlayNextEpisodeEnabled: Boolean = false,
     val streamAutoPlayNextEpisodeFallbackEnabled: Boolean = true,
     val streamAutoPlayPreferBingeGroupForNextEpisode: Boolean = true,
@@ -328,6 +337,9 @@ data class PlayerSettings(
         const val DEFAULT_STILL_WATCHING_EPISODE_THRESHOLD = 3
         const val MIN_STILL_WATCHING_EPISODE_THRESHOLD = 2
         const val MAX_STILL_WATCHING_EPISODE_THRESHOLD = 6
+        const val DEFAULT_POST_PLAY_MOVIE_THRESHOLD_PERCENT = 90
+        const val MIN_POST_PLAY_MOVIE_THRESHOLD_PERCENT = 80
+        const val MAX_POST_PLAY_MOVIE_THRESHOLD_PERCENT = 100
 
         const val STREAM_AUTOPLAY_TIMEOUT_UNLIMITED = Int.MAX_VALUE
 
@@ -522,6 +534,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val legacyMapDv7ToHevcKey = booleanPreferencesKey("map_dv7_to_hevc")
     private val dv7LibdoviModeOverrideKey = intPreferencesKey("dv7_libdovi_mode_override")
     private val stripHdr10PlusSeiKey = booleanPreferencesKey("strip_hdr10plus_sei")
+    private val mpvHi10pGnextSoftwareFallbackEnabledKey =
+        booleanPreferencesKey("mpv_hi10p_gnext_software_fallback_enabled")
     private val mpvHardwareDecodeModeKey = stringPreferencesKey("mpv_hardware_decode_mode")
     private val frameRateMatchingKey = booleanPreferencesKey("frame_rate_matching")
     private val frameRateMatchingModeKey = stringPreferencesKey("frame_rate_matching_mode")
@@ -531,6 +545,8 @@ class PlayerSettingsDataStore @Inject constructor(
     private val streamAutoPlaySelectedAddonsKey = stringSetPreferencesKey("stream_auto_play_selected_addons")
     private val streamAutoPlaySelectedPluginsKey = stringSetPreferencesKey("stream_auto_play_selected_plugins")
     private val streamAutoPlayRegexKey = stringPreferencesKey("stream_auto_play_regex")
+    private val postPlayRecommendationsEnabledKey = booleanPreferencesKey("post_play_recommendations_enabled")
+    private val postPlayMovieThresholdPercentKey = intPreferencesKey("post_play_movie_threshold_percent")
     private val streamAutoPlayNextEpisodeEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_enabled")
     private val streamAutoPlayNextEpisodeFallbackEnabledKey = booleanPreferencesKey("stream_auto_play_next_episode_fallback_enabled")
     private val streamAutoPlayPreferBingeGroupForNextEpisodeKey = booleanPreferencesKey("stream_auto_play_prefer_bingegroup_next_episode")
@@ -791,7 +807,7 @@ class PlayerSettingsDataStore @Inject constructor(
                     prefs[subtitleUseForcedSubtitlesKey] = true
                     val migratedPreferred = normalizedSecondarySubtitleLanguage
                         ?.takeUnless { it == SUBTITLE_LANGUAGE_FORCED || it == "none" }
-                        ?: "en"
+                        ?: SubtitleLanguageOption.DEVICE
                     prefs[subtitlePreferredLanguageKey] = migratedPreferred
                     prefs.remove(subtitleSecondaryLanguageKey)
                 }
@@ -809,6 +825,7 @@ class PlayerSettingsDataStore @Inject constructor(
     val playerSettings: Flow<PlayerSettings> = profileManager.activeProfileId.flatMapLatest { pid ->
         factory.get(pid, FEATURE).data.onStart { migrateProfile(pid) }
     }.map { prefs ->
+        try {
             PlayerSettings(
                 playerPreference = prefs[playerPreferenceKey]?.let {
                     runCatching { PlayerPreference.valueOf(it) }.getOrDefault(PlayerPreference.INTERNAL)
@@ -878,6 +895,8 @@ class PlayerSettingsDataStore @Inject constructor(
                 },
                 dv7LibdoviModeOverride = (prefs[dv7LibdoviModeOverrideKey] ?: -1).coerceIn(-1, 4),
                 stripHdr10PlusSei = prefs[stripHdr10PlusSeiKey] ?: false,
+                mpvHi10pGnextSoftwareFallbackEnabled =
+                    prefs[mpvHi10pGnextSoftwareFallbackEnabledKey] ?: false,
                 mpvHardwareDecodeMode = parseMpvHardwareDecodeMode(prefs[mpvHardwareDecodeModeKey]),
                 frameRateMatchingMode = prefs[frameRateMatchingModeKey]?.let {
                     runCatching { FrameRateMatchingMode.valueOf(it) }.getOrNull()
@@ -892,6 +911,12 @@ class PlayerSettingsDataStore @Inject constructor(
                 streamAutoPlaySelectedAddons = prefs[streamAutoPlaySelectedAddonsKey] ?: emptySet(),
                 streamAutoPlaySelectedPlugins = prefs[streamAutoPlaySelectedPluginsKey] ?: emptySet(),
                 streamAutoPlayRegex = prefs[streamAutoPlayRegexKey] ?: "",
+                postPlayRecommendationsEnabled = prefs[postPlayRecommendationsEnabledKey] ?: true,
+                postPlayMovieThresholdPercent = (prefs[postPlayMovieThresholdPercentKey]
+                    ?: PlayerSettings.DEFAULT_POST_PLAY_MOVIE_THRESHOLD_PERCENT).coerceIn(
+                    PlayerSettings.MIN_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
+                    PlayerSettings.MAX_POST_PLAY_MOVIE_THRESHOLD_PERCENT
+                ),
                 streamAutoPlayNextEpisodeEnabled = prefs[streamAutoPlayNextEpisodeEnabledKey] ?: false,
                 streamAutoPlayNextEpisodeFallbackEnabled = prefs[streamAutoPlayNextEpisodeFallbackEnabledKey] ?: true,
                 streamAutoPlayPreferBingeGroupForNextEpisode =
@@ -967,28 +992,32 @@ class PlayerSettingsDataStore @Inject constructor(
                 enableHttp2 = prefs[enableHttp2Key] ?: PlayerSettings.DEFAULT_ENABLE_HTTP2,
                 nuvioPerformanceModeEnabled = (prefs[nuvioPerformanceModeEnabledKey] ?: PlayerSettings.DEFAULT_NUVIO_PERFORMANCE_MODE_ENABLED) &&
                         android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O,
-                subtitleStyle = SubtitleStyleSettings(
-                    preferredLanguage = normalizeSubtitlePreferredLanguageForRead(
+                subtitleStyle = run {
+                    val resolvedPreferredLanguage = resolveSubtitlePreferredLanguage(
                         prefs[subtitlePreferredLanguageKey],
                         prefs[subtitleSecondaryLanguageKey]
-                    ),
-                    secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey]
-                        ?.let(::normalizeSelectableLanguageCode)
-                        ?.takeUnless { it == SUBTITLE_LANGUAGE_FORCED },
-                    useForcedSubtitles = (prefs[subtitleUseForcedSubtitlesKey] ?: false) ||
-                        prefs[subtitlePreferredLanguageKey]?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED ||
-                        prefs[subtitleSecondaryLanguageKey]?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED,
-                    showOnlyPreferredLanguages = prefs[subtitleShowOnlyPreferredLanguagesKey] ?: false,
-                    stripSdh = prefs[subtitleStripSdhKey] ?: false,
-                    size = prefs[subtitleSizeKey] ?: 100,
-                    verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
-                    bold = prefs[subtitleBoldKey] ?: false,
-                    textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
-                    backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
-                    outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
-                    outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
-                    outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
-                ),
+                    )
+                    SubtitleStyleSettings(
+                        preferredLanguage = resolvedPreferredLanguage.languageCode,
+                        isPreferredLanguageSystemDefault = resolvedPreferredLanguage.isSystemDefault,
+                        secondaryPreferredLanguage = prefs[subtitleSecondaryLanguageKey]
+                            ?.let(::normalizeSelectableLanguageCode)
+                            ?.takeUnless { it == SUBTITLE_LANGUAGE_FORCED },
+                        useForcedSubtitles = (prefs[subtitleUseForcedSubtitlesKey] ?: false) ||
+                            prefs[subtitlePreferredLanguageKey]?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED ||
+                            prefs[subtitleSecondaryLanguageKey]?.let(::normalizeSelectableLanguageCode) == SUBTITLE_LANGUAGE_FORCED,
+                        showOnlyPreferredLanguages = prefs[subtitleShowOnlyPreferredLanguagesKey] ?: false,
+                        stripSdh = prefs[subtitleStripSdhKey] ?: false,
+                        size = prefs[subtitleSizeKey] ?: 100,
+                        verticalOffset = prefs[subtitleVerticalOffsetKey] ?: 5,
+                        bold = prefs[subtitleBoldKey] ?: false,
+                        textColor = prefs[subtitleTextColorKey] ?: Color.White.toArgb(),
+                        backgroundColor = prefs[subtitleBackgroundColorKey] ?: Color.Transparent.toArgb(),
+                        outlineEnabled = prefs[subtitleOutlineEnabledKey] ?: true,
+                        outlineColor = prefs[subtitleOutlineColorKey] ?: Color.Black.toArgb(),
+                        outlineWidth = prefs[subtitleOutlineWidthKey] ?: 2
+                    )
+                },
                 bufferSettings = BufferSettings(
                     minBufferMs = prefs[minBufferMsKey] ?: BufferSettings.DEFAULT_MIN_BUFFER_MS,
                     maxBufferMs = prefs[maxBufferMsKey] ?: BufferSettings.DEFAULT_MAX_BUFFER_MS,
@@ -999,6 +1028,10 @@ class PlayerSettingsDataStore @Inject constructor(
                     retainBackBufferFromKeyframe = prefs[retainBackBufferFromKeyframeKey] ?: false
                 )
             )
+        } catch (e: ClassCastException) {
+            Log.w("PlayerSettingsDataStore", "Corrupt preference value, using defaults", e)
+            PlayerSettings()
+        }
         }
 
     val useLibass: Flow<Boolean> = profileManager.activeProfileId.flatMapLatest { pid ->
@@ -1263,6 +1296,21 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
+    suspend fun setPostPlayRecommendationsEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[postPlayRecommendationsEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setPostPlayMovieThresholdPercent(percent: Int) {
+        store().edit { prefs ->
+            prefs[postPlayMovieThresholdPercentKey] = percent.coerceIn(
+                PlayerSettings.MIN_POST_PLAY_MOVIE_THRESHOLD_PERCENT,
+                PlayerSettings.MAX_POST_PLAY_MOVIE_THRESHOLD_PERCENT
+            )
+        }
+    }
+
     suspend fun setStreamAutoPlayNextEpisodeEnabled(enabled: Boolean) {
         store().edit { prefs ->
             prefs[streamAutoPlayNextEpisodeEnabledKey] = enabled
@@ -1404,7 +1452,17 @@ class PlayerSettingsDataStore @Inject constructor(
 
     private fun normalizeSelectableLanguageCode(language: String): String {
         val code = language.trim().lowercase()
-        return when (code) { "pt-br", "pt_br", "br", "pob" -> "pt-br"; "pt-pt", "pt_pt", "por" -> "pt"; "forced", "force", "forc" -> SUBTITLE_LANGUAGE_FORCED; else -> code }
+        return when (code) {
+            "pt-br", "pt_br", "br", "pob" -> "pt-br"
+            "pt-pt", "pt_pt", "por" -> "pt"
+            "forced", "force", "forc" -> SUBTITLE_LANGUAGE_FORCED
+            "zh-cn", "zh_cn" -> "zh-CN"
+            "zh-tw", "zh_tw" -> "zh-TW"
+            "en-au", "en_au" -> "en-AU"
+            "en-ca", "en_ca" -> "en-CA"
+            "en-gb", "en_gb" -> "en-GB"
+            else -> code
+        }
     }
 
     private fun normalizeSecondaryAudioLanguageCode(language: String): String? {
@@ -1417,24 +1475,71 @@ class PlayerSettingsDataStore @Inject constructor(
         }
     }
 
-    private fun normalizeSubtitlePreferredLanguageForRead(
+    private data class ResolvedSubtitlePreferredLanguage(
+        val languageCode: String,
+        val isSystemDefault: Boolean
+    )
+
+    private fun resolveDeviceSubtitleLanguage(): String {
+        val locale = if (android.os.Build.VERSION.SDK_INT >= 24) {
+            android.content.res.Resources.getSystem().configuration.locales[0]
+        } else {
+            @Suppress("DEPRECATION")
+            android.content.res.Resources.getSystem().configuration.locale
+        }
+
+        val rawLanguage = locale?.language.orEmpty()
+        val legacyMapped = when (rawLanguage) {
+            "iw" -> "he"
+            "in" -> "id"
+            "ji" -> "yi"
+            else -> rawLanguage
+        }
+        val country = locale?.country.orEmpty()
+
+        if (country.isNotBlank()) {
+            val regionSpecific = normalizeSelectableLanguageCode("$legacyMapped-$country")
+            if (AVAILABLE_SUBTITLE_LANGUAGES.any { it.code == regionSpecific }) {
+                return regionSpecific
+            }
+        }
+
+        val candidate = normalizeSelectableLanguageCode(legacyMapped)
+        val isSupported = candidate.isNotBlank() && AVAILABLE_SUBTITLE_LANGUAGES.any { it.code == candidate }
+        return if (isSupported) candidate else "en"
+    }
+
+    private fun resolveSubtitlePreferredLanguage(
         preferredLanguage: String?,
         secondaryLanguage: String?
-    ): String {
-        val preferred = preferredLanguage
-            ?.let(::normalizeSelectableLanguageCode)
-            ?: return "en"
-        if (preferred != SUBTITLE_LANGUAGE_FORCED) return preferred
+    ): ResolvedSubtitlePreferredLanguage {
+        val preferred = preferredLanguage?.let(::normalizeSelectableLanguageCode)
+        if (preferred == null || preferred == SubtitleLanguageOption.DEVICE) {
+            return ResolvedSubtitlePreferredLanguage(resolveDeviceSubtitleLanguage(), isSystemDefault = true)
+        }
+        if (preferred != SUBTITLE_LANGUAGE_FORCED) {
+            return ResolvedSubtitlePreferredLanguage(preferred, isSystemDefault = false)
+        }
 
-        return secondaryLanguage
+        val migratedFromForced = secondaryLanguage
             ?.let(::normalizeSelectableLanguageCode)
             ?.takeUnless { it == SUBTITLE_LANGUAGE_FORCED || it == "none" }
-            ?: "en"
+        return if (migratedFromForced != null) {
+            ResolvedSubtitlePreferredLanguage(migratedFromForced, isSystemDefault = false)
+        } else {
+            ResolvedSubtitlePreferredLanguage(resolveDeviceSubtitleLanguage(), isSystemDefault = true)
+        }
     }
 
     suspend fun setMpvHardwareDecodeMode(mode: MpvHardwareDecodeMode) {
         store().edit { prefs ->
             prefs[mpvHardwareDecodeModeKey] = mode.name
+        }
+    }
+
+    suspend fun setMpvHi10pGnextSoftwareFallbackEnabled(enabled: Boolean) {
+        store().edit { prefs ->
+            prefs[mpvHi10pGnextSoftwareFallbackEnabledKey] = enabled
         }
     }
 
@@ -1464,7 +1569,7 @@ class PlayerSettingsDataStore @Inject constructor(
     suspend fun setStripHdr10PlusSei(enabled: Boolean) { store().edit { it[stripHdr10PlusSeiKey] = enabled } }
 
     // Subtitle styles
-    suspend fun setSubtitlePreferredLanguage(language: String) { store().edit { it[subtitlePreferredLanguageKey] = normalizeSelectableLanguageCode(language.ifBlank { "en" }) } }
+    suspend fun setSubtitlePreferredLanguage(language: String) { store().edit { it[subtitlePreferredLanguageKey] = normalizeSelectableLanguageCode(language.ifBlank { SubtitleLanguageOption.DEVICE }) } }
     suspend fun setSubtitleSecondaryLanguage(language: String?) {
         store().edit { prefs ->
             val normalizedLanguage = language?.takeIf { it.isNotBlank() }?.let(::normalizeSelectableLanguageCode)

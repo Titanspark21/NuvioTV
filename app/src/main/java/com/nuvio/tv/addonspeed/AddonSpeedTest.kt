@@ -112,7 +112,7 @@ class AddonSpeedTest @Inject constructor(
 
         val startedAt = System.currentTimeMillis()
         val result = withTimeoutOrNull(TIMEOUT_MS) {
-            streamRepository.getStreamsFromAddon(addon.baseUrl, item.type, videoId)
+            streamRepository.getStreamsFromAddon(addon, item.type, videoId)
         }
         val elapsed = System.currentTimeMillis() - startedAt
 

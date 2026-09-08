@@ -5,9 +5,9 @@ name: Sync upstream and release
 # releases (see GITHUB_OWNER in app/build.gradle.kts), so a successful run here
 # is what makes the "update available" prompt appear on the TV.
 #
-# The fork's own changes live as ordinary commits on top of upstream/dev and are
-# rebased onto each new upstream state. A rebase that conflicts stops the run and
-# opens an issue instead of publishing anything.
+# The fork's own changes are kept in a merge-based history with upstream/dev. This
+# avoids replaying every fork commit whenever upstream moves; a genuine overlap still
+# stops the run and opens an issue instead of publishing anything.
 
 on:
   schedule:
@@ -68,30 +68,30 @@ jobs:
             echo "proceed=true" >> "${GITHUB_OUTPUT}"
           fi
 
-      - name: Rebase the fork's changes onto upstream
+      - name: Merge upstream changes into the fork
         if: steps.decide.outputs.proceed == 'true'
-        id: rebase
+        id: sync
         run: |
-          if git rebase upstream/dev; then
-            echo "Rebase clean."
+          if git merge --no-edit --no-ff upstream/dev; then
+            echo "Upstream merge clean."
           else
-            git rebase --abort || true
+            git merge --abort || true
             echo "conflict=true" >> "${GITHUB_OUTPUT}"
             exit 1
           fi
 
-      - name: Report a rebase conflict
-        if: failure() && steps.rebase.outputs.conflict == 'true'
+      - name: Report an upstream merge conflict
+        if: failure() && steps.sync.outputs.conflict == 'true'
         run: |
           gh issue create --repo "${GITHUB_REPOSITORY}" \
             --title "Upstream sync needs a hand ($(date -u +%Y-%m-%d))" \
-            --body "The scheduled sync could not rebase this fork's changes onto upstream/dev at ${{ steps.decide.outputs.upstream_sha }} without conflicts. Upstream has edited the same lines the fork changes. Resolve it locally with \`git fetch upstream && git rebase upstream/dev\`, push, then re-run this workflow. No release was published, so the app keeps offering the last good build."
+            --body "The scheduled sync could not merge upstream/dev at ${{ steps.decide.outputs.upstream_sha }} into this fork without conflicts. Upstream has edited the same lines as a fork change. Resolve it locally with \`git fetch upstream && git merge upstream/dev\`, push, then re-run this workflow. No release was published, so the app keeps offering the last good build."
 
       # Upstream has said it wants the built-in debrid integration gone. This fork keeps
-      # it, and the sync above rebases blindly, so check the feature survived before
+      # it, and the sync above merges upstream changes, so check the feature survived before
       # spending an hour building a release that quietly lost it. See
       # preservation/TORBOX-INSTANT.md.
-      - name: Check Torbox Instant survived the rebase
+      - name: Check Torbox Instant survived the upstream merge
         if: steps.decide.outputs.proceed == 'true'
         id: torbox_guard
         run: bash scripts/check-torbox-instant.sh
@@ -120,17 +120,17 @@ jobs:
             --color B60205 --description "Fork-preserved feature is missing from upstream" 2>/dev/null || true
 
           {
-            echo "The upstream sync rebased cleanly, but the Torbox Instant guard failed"
+            echo "The upstream sync merged cleanly, but the Torbox Instant guard failed"
             echo "afterwards. That means upstream has removed or gutted part of the built-in"
             echo "debrid integration this fork deliberately keeps."
             echo
-            echo "**Nothing was published.** The rebased branch was not pushed and no release"
+            echo "**Nothing was published.** The merged branch was not pushed and no release"
             echo "was created, so the TV keeps offering the last good build. This will keep"
             echo "happening every 6 hours until it is resolved."
             echo
             echo "What to do:"
             echo
-            echo "1. \`git fetch upstream && git rebase upstream/dev\`"
+            echo "1. \`git fetch upstream && git merge upstream/dev\`"
             echo "2. \`bash scripts/check-torbox-instant.sh\` to see exactly what went."
             echo "3. Restore it: \`git checkout torbox-instant-v1 -- <the paths named in the failure>\`"
             echo "4. Fix any call sites upstream changed around it, commit, push."
@@ -249,9 +249,9 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-      - name: Push the rebased branch
+      - name: Push the synced branch
         if: steps.decide.outputs.proceed == 'true'
-        run: git push --force-with-lease origin dev
+        run: git push origin dev
 
       - name: Publish the release
         if: steps.decide.outputs.proceed == 'true'
@@ -269,7 +269,7 @@ jobs:
           upstream_subject="$(git log -1 --format=%s "${UPSTREAM_SHA}")"
 
           {
-            echo "Automatic build of NuvioTV ${BASE_VERSION} with the fork's shuffle button."
+            echo "Automatic build of NuvioTV ${BASE_VERSION} with the fork's shuffle button and Dialogue Leveler."
             echo
             echo "Upstream: NuvioMedia/NuvioTV at [\`${UPSTREAM_SHA:0:7}\`](https://github.com/NuvioMedia/NuvioTV/commit/${UPSTREAM_SHA}) - ${upstream_subject}"
             echo
@@ -289,7 +289,7 @@ jobs:
       # exists so that no other failure is silent, because an unattended job that only
       # reports into the Actions tab is an unattended job nobody hears fail.
       - name: Report any other failure
-        if: failure() && steps.rebase.outputs.conflict != 'true' && steps.torbox_guard.outcome != 'failure'
+        if: failure() && steps.sync.outputs.conflict != 'true' && steps.torbox_guard.outcome != 'failure'
         env:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
@@ -306,7 +306,7 @@ jobs:
             --color D93F0B --description "Automatic upstream sync failed" 2>/dev/null || true
 
           {
-            echo "The 6-hourly sync failed at a step other than the rebase or the Torbox"
+            echo "The 6-hourly sync failed at a step other than the upstream merge or the Torbox"
             echo "Instant guard, so this is most likely a build or publishing problem rather"
             echo "than an upstream change to work around."
             echo
